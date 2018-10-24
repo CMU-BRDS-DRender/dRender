@@ -3,6 +3,7 @@ package com.drender;
 import com.drender.model.Channels;
 import com.drender.model.project.ProjectAction;
 import com.drender.model.project.ProjectRequest;
+import com.drender.model.project.ProjectResponse;
 import io.vertx.core.AbstractVerticle;
 import io.vertx.core.Future;
 import io.vertx.core.eventbus.EventBus;
@@ -60,9 +61,10 @@ public class MasterController extends AbstractVerticle {
         eventBus.send(Channels.DRIVER_PROJECT, Json.encode(projectRequest),
             ar -> {
                 if (ar.succeeded()) {
+                    ProjectResponse response = Json.decodeValue(ar.result().body().toString(), ProjectResponse.class);
                     routingContext.response()
                             .putHeader("content-type", "application/json; charset=utf-8")
-                            .end(Json.encode("\"ProjectRequest \" + projectRequest.getId() + \" has been created\""));
+                            .end(Json.encode(response));
                 }
             }
         );

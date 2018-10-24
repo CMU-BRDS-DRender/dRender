@@ -3,7 +3,7 @@ package com.drender;
 import com.drender.cloud.ImageFactory;
 import com.drender.eventprocessors.DRenderLogger;
 import com.drender.eventprocessors.HeartbeatVerticle;
-import com.drender.eventprocessors.InstanceProvisioner;
+import com.drender.eventprocessors.InstanceManager;
 import com.drender.model.*;
 import com.drender.model.cloud.Instance;
 import com.drender.model.job.Job;
@@ -14,7 +14,6 @@ import com.drender.model.project.Project;
 import com.drender.model.project.ProjectRequest;
 import com.drender.model.project.ProjectResponse;
 import io.vertx.core.AbstractVerticle;
-import io.vertx.core.eventbus.DeliveryOptions;
 import io.vertx.core.eventbus.EventBus;
 import io.vertx.core.json.Json;
 import io.vertx.core.json.JsonObject;
@@ -37,7 +36,7 @@ public class DRenderDriver extends AbstractVerticle {
         // Deploy all the verticles
         vertx.deployVerticle(new DRenderLogger());
         vertx.deployVerticle(new HeartbeatVerticle());
-        vertx.deployVerticle(new InstanceProvisioner());
+        vertx.deployVerticle(new InstanceManager());
 
         // setup listeners for dRender Driver
         EventBus eventBus = vertx.eventBus();
@@ -135,9 +134,7 @@ public class DRenderDriver extends AbstractVerticle {
 
         List<Instance> ips = new ArrayList<>();
 
-        DeliveryOptions options = new DeliveryOptions();
-        options.addHeader("Content-Length", "");
-        eventBus.send(Channels.PROVISIONER, Json.encode(instanceRequest),
+        eventBus.send(Channels.INSTANCE_MANAGER, Json.encode(instanceRequest),
             ar -> {
                 if (ar.succeeded()) {
                     InstanceResponse response = Json.decodeValue(ar.result().body().toString(), InstanceResponse.class);

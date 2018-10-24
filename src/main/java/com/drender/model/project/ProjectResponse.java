@@ -1,5 +1,6 @@
 package com.drender.model.project;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import io.vertx.core.json.JsonObject;
 import lombok.*;
 
@@ -8,6 +9,7 @@ import lombok.*;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
+@JsonInclude(JsonInclude.Include.NON_NULL)
 public class ProjectResponse {
     private String id;
     private String software;

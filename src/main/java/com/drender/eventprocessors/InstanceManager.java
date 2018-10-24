@@ -14,7 +14,7 @@ import io.vertx.core.json.Json;
 
 import java.util.Collections;
 
-public class InstanceProvisioner extends AbstractVerticle {
+public class InstanceManager extends AbstractVerticle {
 
     /*
         Currently setup for AWS
@@ -24,11 +24,11 @@ public class InstanceProvisioner extends AbstractVerticle {
     @Override
     public void start() throws Exception {
         EventBus eventBus = vertx.eventBus();
-        eventBus.consumer(Channels.PROVISIONER)
+        eventBus.consumer(Channels.INSTANCE_MANAGER)
                 .handler(message -> {
                     InstanceRequest instanceRequest = Json.decodeValue(message.body().toString(), InstanceRequest.class);
 
-                    System.out.println("InstanceProvisioner: Received new request: ");
+                    System.out.println("InstanceManager: Received new request: ");
                     System.out.println(Json.encode(instanceRequest));
 
                     InstanceResponse response = new InstanceResponse("success",
