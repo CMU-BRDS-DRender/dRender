@@ -1,14 +1,15 @@
 package com.drender;
 
 import com.drender.model.Channels;
-import com.drender.model.ProjectAction;
-import com.drender.model.ProjectRequest;
+import com.drender.model.project.ProjectAction;
+import com.drender.model.project.ProjectRequest;
 import io.vertx.core.AbstractVerticle;
 import io.vertx.core.Future;
 import io.vertx.core.eventbus.EventBus;
 import io.vertx.core.json.Json;
 import io.vertx.ext.web.Router;
 import io.vertx.ext.web.RoutingContext;
+import io.vertx.ext.web.handler.BodyHandler;
 
 public class MasterController extends AbstractVerticle {
 
@@ -18,6 +19,9 @@ public class MasterController extends AbstractVerticle {
         vertx.deployVerticle(new DRenderDriver());
 
         Router router = Router.router(vertx);
+
+        // Allow reading of request body
+        router.route().handler(BodyHandler.create());
 
         // start defining routes
         // Start new ProjectRequest
@@ -48,14 +52,17 @@ public class MasterController extends AbstractVerticle {
     private void startProject(RoutingContext routingContext) {
         ProjectRequest projectRequest = Json.decodeValue(routingContext.getBodyAsString(), ProjectRequest.class);
 
+        System.out.println("MasterController: Received new request: ");
+        System.out.println(Json.encode(projectRequest));
+
         // Send the start message to Driver
         EventBus eventBus = vertx.eventBus();
         eventBus.send(Channels.DRIVER_PROJECT, Json.encode(projectRequest),
             ar -> {
                 if (ar.succeeded()) {
                     routingContext.response()
-                            .write("ProjectRequest " + projectRequest.getId() + " has been created")
-                            .end();
+                            .putHeader("content-type", "application/json; charset=utf-8")
+                            .end(Json.encode("\"ProjectRequest \" + projectRequest.getId() + \" has been created\""));
                 }
             }
         );
@@ -73,7 +80,7 @@ public class MasterController extends AbstractVerticle {
                 if (ar.succeeded()) {
                     routingContext.response()
                             .putHeader("content-type", "application/json; charset=utf-8")
-                            .end(Json.encodePrettily(ar.result().body()));
+                            .end(Json.encode(ar.result().body()));
                 }
             }
         );

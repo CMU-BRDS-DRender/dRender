@@ -1,4 +1,4 @@
-package com.drender.model;
+package com.drender.model.project;
 
 import io.vertx.core.json.JsonObject;
 import lombok.*;
@@ -9,7 +9,7 @@ import lombok.*;
 @AllArgsConstructor
 @Builder
 public class ProjectResponse {
-    private int id;
+    private String id;
     private String software;
     private String source;
     private int startFrame;

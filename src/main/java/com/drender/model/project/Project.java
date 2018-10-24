@@ -1,4 +1,4 @@
-package com.drender.model;
+package com.drender.model.project;
 
 import lombok.*;
 
@@ -8,7 +8,7 @@ import lombok.*;
 @Setter
 @Builder
 public class Project {
-    private int ID;
+    private String ID;
     private String software;
     private String source;
     private int startFrame;
