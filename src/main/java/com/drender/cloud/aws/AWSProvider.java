@@ -16,9 +16,6 @@ public class AWSProvider implements MachineProvider<AWSRequestProperty>{
 
     private AWSStaticCredentialsProvider credentialProvider;
     private EC2Provisioner ec2Provisioner;
-    private ArrayList<String> instanceIds;
-    private ArrayList<String> spotInstanceRequestIds;
-
 
     public AWSProvider(){
         HashMap<String, String> localAWSCredentials = Credentials.getCredentials();
