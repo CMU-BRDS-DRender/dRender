@@ -1,58 +1,79 @@
 package com.drender.cloud.aws;
-
-import java.util.ArrayList;
-import java.util.HashMap;
-import com.amazonaws.AmazonClientException;
-import com.amazonaws.auth.AWSCredentials;
 import com.amazonaws.auth.AWSStaticCredentialsProvider;
-import com.amazonaws.auth.BasicAWSCredentials;
 import com.amazonaws.services.ec2.AmazonEC2;
 import com.amazonaws.services.ec2.AmazonEC2ClientBuilder;
 import com.amazonaws.services.ec2.model.*;
+import com.amazonaws.services.s3.model.ObjectTagging;
+import com.amazonaws.services.s3.model.PutObjectResult;
+import com.amazonaws.waiters.WaiterParameters;
+import com.drender.model.cloud.DrenderInstance;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.stream.Collectors;
 
 public class EC2Provisioner {
 
-    private AmazonEC2 ec2;
-    private ArrayList<String> instanceIds;
-    private ArrayList<String> spotInstanceRequestIds;
-    private AWSStaticCredentialsProvider credentialProvider;
-    private String region;
+    private static AmazonEC2 ec2Client = null;
 
-    public EC2Provisioner(String region) throws Exception {
+    public EC2Provisioner(String region, AWSStaticCredentialsProvider credentialProvider){
 
-        HashMap<String, String> localAWSCredentials = Credentials.getCredentials();
+        if(ec2Client == null) {
+            ec2Client = AmazonEC2ClientBuilder.standard().withCredentials(credentialProvider)
+                    .withRegion(region)
+                    .build();
 
-        AWSCredentials credentials = null;
-        try {
-            credentials = new BasicAWSCredentials(localAWSCredentials.get("AWS_ACCESS_KEY_ID"),localAWSCredentials.get("AWS_ACCESS_KEY_SECRET"));
-            credentialProvider = new AWSStaticCredentialsProvider(credentials);
-        } catch (Exception e) {
-            throw new AmazonClientException(
-                    "Cannot load the credentials from the credential profiles file.Please make sure that your credentials file is at the correct "
-            e);
         }
-
-        this.region = region;
-        ec2 = AmazonEC2ClientBuilder.standard().withCredentials(credentialProvider)
-                .withRegion(region)
-                .build();
 
     }
 
+    public AmazonEC2 getClient() throws Exception {
+        return ec2Client;
+    }
 
-    public void spawnInstances(String securityGroup, String sshKeyName,String imageID, int count){
+
+    public List<DrenderInstance> spawnInstances(List<String> nameList, String securityGroup, String sshKeyName, String imageID) {
+
         RunInstancesRequest runInstancesRequest =
                 new RunInstancesRequest();
 
         runInstancesRequest.withImageId(imageID)
                 .withInstanceType(InstanceType.T1Micro)
-                .withMinCount(1)
-                .withMaxCount(1)
+                .withMinCount(nameList.size())
+                .withMaxCount(nameList.size())
                 .withKeyName(sshKeyName)
                 .withSecurityGroups(securityGroup);
 
-        RunInstancesResult result = ec2.runInstances(
-                runInstancesRequest);
+        RunInstancesResult result = ec2Client.runInstances(runInstancesRequest);
+
+        List<Instance> instanceList = result.getReservation().getInstances();
+        String[] instanceIds = new String[nameList.size()];
+        instanceIds = instanceList.stream().map(Instance::getInstanceId).collect(Collectors.toList()).toArray(instanceIds);
+
+        DescribeInstanceStatusRequest waitRequest = new DescribeInstanceStatusRequest().withInstanceIds(instanceIds);
+
+        ec2Client.waiters().instanceStatusOk().run(new WaiterParameters<DescribeInstanceStatusRequest>().withRequest(waitRequest));
+
+        instanceList = ec2Client.describeInstances(new DescribeInstancesRequest()
+                .withInstanceIds(instanceIds))
+                .getReservations()
+                .stream()
+                .map(Reservation::getInstances)
+                .flatMap(List::stream)
+                .collect(Collectors.toList());
+
+        List<DrenderInstance> drenderInstanceList = new ArrayList<>();
+        for( int i = 0 ; i < instanceList.size() ; i++){
+            Instance instance = instanceList.get(i);
+            String name = nameList.get(i);
+            Tag nameTag = new Tag("Name", name);
+            List<Tag> tagList = new ArrayList<>();
+            tagList.add(nameTag);
+            instance.setTags(tagList);
+            drenderInstanceList.add(new DrenderInstance(instance.getInstanceId(),instance.getPublicIpAddress()));
+        }
+
+        return drenderInstanceList;
     }
 
 }

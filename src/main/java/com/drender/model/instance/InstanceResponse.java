@@ -1,6 +1,6 @@
 package com.drender.model.instance;
 
-import com.drender.model.cloud.Instance;
+import com.drender.model.cloud.DrenderInstance;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -14,5 +14,5 @@ import java.util.List;
 @AllArgsConstructor
 public class InstanceResponse {
     private String message;
-    private List<Instance> instances;
+    private List<DrenderInstance> instances;
 }

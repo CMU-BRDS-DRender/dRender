@@ -4,7 +4,7 @@ import com.drender.cloud.aws.AWSProvider;
 import com.drender.cloud.MachineProvider;
 import com.drender.model.Channels;
 import com.drender.model.cloud.AWSRequestProperty;
-import com.drender.model.cloud.Instance;
+import com.drender.model.cloud.DrenderInstance;
 import com.drender.model.instance.InstanceResponse;
 import com.drender.model.job.Job;
 import com.drender.model.instance.InstanceRequest;
@@ -12,7 +12,8 @@ import io.vertx.core.AbstractVerticle;
 import io.vertx.core.eventbus.EventBus;
 import io.vertx.core.json.Json;
 
-import java.util.Collections;
+import java.util.List;
+import java.util.stream.Collectors;
 
 public class InstanceManager extends AbstractVerticle {
 
@@ -31,16 +32,18 @@ public class InstanceManager extends AbstractVerticle {
                     System.out.println("InstanceManager: Received new request: ");
                     System.out.println(Json.encode(instanceRequest));
 
-                    InstanceResponse response = new InstanceResponse("success",
-                            Collections.singletonList(startNewInstance(instanceRequest.getJobs().get(0))));
+                    InstanceResponse response = new InstanceResponse("success", getNewInstances(instanceRequest.getJobs()));
                     message.reply(Json.encode(response));
                 });
     }
 
-    private Instance startNewInstance(Job job) {
-        String name = job.getProjectID() + "_" + job.getID() + "_" + job.getStartFrame() + "_" + job.getEndFrame();
-        AWSRequestProperty awsRequestProperty = new AWSRequestProperty(name);
-
-        return machineProvider.startMachine(awsRequestProperty);
+    private List<DrenderInstance> getNewInstances(List<Job> jobs) {
+        String region = "us-east-1";
+        String imageId = "<image-id>";
+        String securityGroupName = "";
+        String sshKeyName = "";
+        List<String> nameList = jobs.stream().map(Job::getMachineName).collect(Collectors.toList());
+        AWSRequestProperty awsRequestProperty = new AWSRequestProperty(sshKeyName, securityGroupName,nameList, region, imageId);
+        return machineProvider.startMachines(awsRequestProperty);
     }
 }

@@ -9,7 +9,7 @@ import lombok.Setter;
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
-public class Instance {
+public class DrenderInstance {
     private String ID;
     private String ip;
 }

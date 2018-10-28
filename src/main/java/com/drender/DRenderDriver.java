@@ -5,7 +5,7 @@ import com.drender.eventprocessors.DRenderLogger;
 import com.drender.eventprocessors.HeartbeatVerticle;
 import com.drender.eventprocessors.InstanceManager;
 import com.drender.model.*;
-import com.drender.model.cloud.Instance;
+import com.drender.model.cloud.DrenderInstance;
 import com.drender.model.job.Job;
 import com.drender.model.job.JobAction;
 import com.drender.model.instance.InstanceRequest;
@@ -85,7 +85,7 @@ public class DRenderDriver extends AbstractVerticle {
         prepareJobs(project);
 
         List<Job> jobList = new ArrayList<>(projectJobs.get(project).values());
-        List<Instance> instances = spawnMachines(cloudAMI, jobList);
+        List<DrenderInstance> instances = spawnMachines(cloudAMI, jobList);
 
         String outputURI = "";
 
@@ -130,7 +130,7 @@ public class DRenderDriver extends AbstractVerticle {
         return projectJobs.get(project).keySet().size();
     }
 
-    private void updateJobs(Project project, List<Instance> instances, String outputURI) {
+    private void updateJobs(Project project, List<DrenderInstance> instances, String outputURI) {
         Map<String, Job> jobMap = projectJobs.get(project);
 
         int instanceIdx = 0;
@@ -165,11 +165,11 @@ public class DRenderDriver extends AbstractVerticle {
         return jobMap;
     }
 
-    private List<Instance> spawnMachines(String cloudAMI, List<Job> jobs) {
+    private List<DrenderInstance> spawnMachines(String cloudAMI, List<Job> jobs) {
         EventBus eventBus = vertx.eventBus();
         InstanceRequest instanceRequest = new InstanceRequest(cloudAMI, jobs);
 
-        List<Instance> ips = new ArrayList<>();
+        List<DrenderInstance> ips = new ArrayList<>();
 
         eventBus.send(Channels.INSTANCE_MANAGER, Json.encode(instanceRequest),
             ar -> {
