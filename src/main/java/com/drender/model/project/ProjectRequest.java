@@ -1,5 +1,6 @@
 package com.drender.model.project;
 
+import com.drender.model.cloud.S3Source;
 import lombok.*;
 
 @Getter
@@ -10,7 +11,7 @@ import lombok.*;
 public class ProjectRequest {
     private String id;
     private String software;
-    private String source;
+    private S3Source source;
     private int startFrame;
     private int endFrame;
 
