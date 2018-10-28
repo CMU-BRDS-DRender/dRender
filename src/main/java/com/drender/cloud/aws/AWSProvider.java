@@ -1,9 +1,10 @@
-package com.drender.cloud;
+package com.drender.cloud.aws;
 
+import com.drender.cloud.MachineProvider;
 import com.drender.model.cloud.AWSRequestProperty;
 import com.drender.model.cloud.Instance;
 
-public class AWSProvider implements CloudProvider<AWSRequestProperty>{
+public class AWSProvider implements MachineProvider<AWSRequestProperty> {
 
     @Override
     public Instance startMachine(AWSRequestProperty property) {

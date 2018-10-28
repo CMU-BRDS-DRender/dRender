@@ -1,7 +1,7 @@
 package com.drender.eventprocessors;
 
-import com.drender.cloud.AWSProvider;
-import com.drender.cloud.CloudProvider;
+import com.drender.cloud.aws.AWSProvider;
+import com.drender.cloud.MachineProvider;
 import com.drender.model.Channels;
 import com.drender.model.cloud.AWSRequestProperty;
 import com.drender.model.cloud.Instance;
@@ -19,7 +19,7 @@ public class InstanceManager extends AbstractVerticle {
     /*
         Currently setup for AWS
      */
-    private CloudProvider<AWSRequestProperty> cloudProvider = new AWSProvider();
+    private MachineProvider<AWSRequestProperty> machineProvider = new AWSProvider();
 
     @Override
     public void start() throws Exception {
@@ -41,6 +41,6 @@ public class InstanceManager extends AbstractVerticle {
         String name = job.getProjectID() + "_" + job.getID() + "_" + job.getStartFrame() + "_" + job.getEndFrame();
         AWSRequestProperty awsRequestProperty = new AWSRequestProperty(name);
 
-        return cloudProvider.startMachine(awsRequestProperty);
+        return machineProvider.startMachine(awsRequestProperty);
     }
 }
