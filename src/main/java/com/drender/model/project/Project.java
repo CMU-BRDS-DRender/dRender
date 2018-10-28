@@ -6,6 +6,7 @@ import lombok.*;
 @NoArgsConstructor
 @Getter
 @Setter
+@EqualsAndHashCode
 @Builder
 public class Project {
     private String ID;

@@ -23,11 +23,16 @@ import java.util.*;
 public class DRenderDriver extends AbstractVerticle {
 
     private final int FRAMES_PER_MACHINE = 20;
+    private final int HEARTBEAT_TIMER = 150000;
 
+    // Stores project -> {jobID, Job} mapping
     private Map<Project, Map<String, Job>> projectJobs;
+    // Stores project -> {jobID, heartbeatTimerID} mapping
+    private Map<Project, Map<String, Long>> projectTimers;
 
     public DRenderDriver(){
         projectJobs = new HashMap<>();
+        projectTimers = new HashMap<>();
     }
 
     @Override
@@ -82,12 +87,32 @@ public class DRenderDriver extends AbstractVerticle {
         List<Job> jobList = new ArrayList<>(projectJobs.get(project).values());
         List<Instance> instances = spawnMachines(cloudAMI, jobList);
 
+        String outputURI = "";
+
+        // Updates each job with newly retrieved IPs and outputURI
+        updateJobs(project, instances, outputURI);
+
+        // Schedule heartbeat checks for the newly created jobs
+        /*for (Job job : projectJobs.get(project).values()) {
+            job.setAction(JobAction.HEARTBEAT_CHECK);
+            long timerID = scheduleHeartbeat(job);
+            // update timer map
+            projectTimers.get(project).put(job.getID(), timerID);
+        }*/
+
+        // Start jobs
+        for (Job job : projectJobs.get(project).values()) {
+            job.setAction(JobAction.START_JOB);
+            startJob(job);
+        }
+
         return new ProjectResponse();
     }
 
     private Project initProjectParameters(ProjectRequest projectRequest) {
         Project project = Project.builder()
                             .ID(projectRequest.getId())
+                            .source(projectRequest.getSource())
                             .startFrame(projectRequest.getStartFrame())
                             .endFrame(projectRequest.getEndFrame())
                             .software(projectRequest.getSoftware())
@@ -105,6 +130,17 @@ public class DRenderDriver extends AbstractVerticle {
         return projectJobs.get(project).keySet().size();
     }
 
+    private void updateJobs(Project project, List<Instance> instances, String outputURI) {
+        Map<String, Job> jobMap = projectJobs.get(project);
+
+        int instanceIdx = 0;
+
+        for (Job job : jobMap.values()) {
+            job.setInstance(instances.get(instanceIdx));
+            job.setOutputURI(outputURI);
+        }
+    }
+
     private Map<String, Job> prepareJobs(Project project) {
         int currentFrame = project.getStartFrame();
         Map<String, Job> jobMap = new HashMap<>();
@@ -117,6 +153,7 @@ public class DRenderDriver extends AbstractVerticle {
                         .startFrame(startFrame)
                         .endFrame(endFrame)
                         .projectID(project.getID())
+                        .source(project.getSource())
                         .action(JobAction.START_NEW_MACHINE)
                         .build();
 
@@ -144,6 +181,26 @@ public class DRenderDriver extends AbstractVerticle {
         );
 
         return ips;
+    }
+
+    private long scheduleHeartbeat(Job job) {
+        long timerId = vertx.setPeriodic(HEARTBEAT_TIMER, id -> {
+            EventBus eventBus = vertx.eventBus();
+            eventBus.send(Channels.HEARTBEAT, Json.encode(job));
+        });
+
+        return timerId;
+    }
+
+    private void startJob(Job job) {
+        EventBus eventBus = vertx.eventBus();
+        eventBus.send(Channels.JOB_MANAGER, Json.encode(job),
+            ar -> {
+                if (ar.succeeded()) {
+                    System.out.println("DRenderDriver: " + ar.result().body());
+                }
+            }
+        );
     }
 
     private ProjectResponse getStatus() {

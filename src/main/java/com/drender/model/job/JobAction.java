@@ -6,5 +6,6 @@ public enum JobAction implements Serializable {
     START_NEW_MACHINE,
     RESTART_MACHINE,
     KILL_MACHINE,
-    HEARTBEAT_CHECK
+    HEARTBEAT_CHECK,
+    START_JOB
 }
