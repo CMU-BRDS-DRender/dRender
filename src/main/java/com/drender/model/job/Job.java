@@ -1,7 +1,7 @@
 package com.drender.model.job;
 
 import com.drender.model.cloud.S3Source;
-import com.drender.model.cloud.DrenderInstance;
+import com.drender.model.instance.DRenderInstance;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import lombok.Builder;
 import lombok.Getter;
@@ -19,14 +19,14 @@ public class Job {
     private String machineName;
     private String projectID;
     private S3Source source;
-    private DrenderInstance instance;
+    private DRenderInstance instance;
     private int startFrame;
     private int endFrame;
     private JobAction action;
     private String outputURI;
 
     @Builder
-    public Job(DrenderInstance instance, String projectID, S3Source source, int startFrame, int endFrame, JobAction action, String outputURI) {
+    public Job(DRenderInstance instance, String projectID, S3Source source, int startFrame, int endFrame, JobAction action, String outputURI) {
         this.ID = UUID.randomUUID().toString();
         this.projectID = projectID;
         this.source = source;

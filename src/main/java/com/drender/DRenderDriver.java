@@ -3,9 +3,9 @@ package com.drender;
 import com.drender.cloud.ImageFactory;
 import com.drender.eventprocessors.DRenderLogger;
 import com.drender.eventprocessors.HeartbeatVerticle;
-import com.drender.eventprocessors.InstanceManager;
+import com.drender.eventprocessors.ResourceManager;
 import com.drender.model.*;
-import com.drender.model.cloud.DrenderInstance;
+import com.drender.model.instance.DRenderInstance;
 import com.drender.model.job.Job;
 import com.drender.model.job.JobAction;
 import com.drender.model.instance.InstanceRequest;
@@ -41,7 +41,7 @@ public class DRenderDriver extends AbstractVerticle {
         // Deploy all the verticles
         vertx.deployVerticle(new DRenderLogger());
         vertx.deployVerticle(new HeartbeatVerticle());
-        vertx.deployVerticle(new InstanceManager());
+        vertx.deployVerticle(new ResourceManager());
 
         // setup listeners for dRender Driver
         EventBus eventBus = vertx.eventBus();
@@ -85,7 +85,7 @@ public class DRenderDriver extends AbstractVerticle {
         prepareJobs(project);
 
         List<Job> jobList = new ArrayList<>(projectJobs.get(project).values());
-        List<DrenderInstance> instances = spawnMachines(cloudAMI, jobList);
+        List<DRenderInstance> instances = spawnMachines(cloudAMI, jobList);
 
         String outputURI = "";
 
@@ -130,7 +130,7 @@ public class DRenderDriver extends AbstractVerticle {
         return projectJobs.get(project).keySet().size();
     }
 
-    private void updateJobs(Project project, List<DrenderInstance> instances, String outputURI) {
+    private void updateJobs(Project project, List<DRenderInstance> instances, String outputURI) {
         Map<String, Job> jobMap = projectJobs.get(project);
 
         int instanceIdx = 0;
@@ -165,11 +165,11 @@ public class DRenderDriver extends AbstractVerticle {
         return jobMap;
     }
 
-    private List<DrenderInstance> spawnMachines(String cloudAMI, List<Job> jobs) {
+    private List<DRenderInstance> spawnMachines(String cloudAMI, List<Job> jobs) {
         EventBus eventBus = vertx.eventBus();
         InstanceRequest instanceRequest = new InstanceRequest(cloudAMI, jobs);
 
-        List<DrenderInstance> ips = new ArrayList<>();
+        List<DRenderInstance> ips = new ArrayList<>();
 
         eventBus.send(Channels.INSTANCE_MANAGER, Json.encode(instanceRequest),
             ar -> {

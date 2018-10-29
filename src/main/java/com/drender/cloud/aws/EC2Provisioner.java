@@ -1,12 +1,10 @@
 package com.drender.cloud.aws;
-import com.amazonaws.auth.AWSStaticCredentialsProvider;
+import com.amazonaws.auth.AWSCredentialsProvider;
 import com.amazonaws.services.ec2.AmazonEC2;
 import com.amazonaws.services.ec2.AmazonEC2ClientBuilder;
 import com.amazonaws.services.ec2.model.*;
-import com.amazonaws.services.s3.model.ObjectTagging;
-import com.amazonaws.services.s3.model.PutObjectResult;
 import com.amazonaws.waiters.WaiterParameters;
-import com.drender.model.cloud.DrenderInstance;
+import com.drender.model.instance.DRenderInstance;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -16,15 +14,13 @@ public class EC2Provisioner {
 
     private static AmazonEC2 ec2Client = null;
 
-    public EC2Provisioner(String region, AWSStaticCredentialsProvider credentialProvider){
-
+    public EC2Provisioner(String region, AWSCredentialsProvider credentialProvider){
         if(ec2Client == null) {
-            ec2Client = AmazonEC2ClientBuilder.standard().withCredentials(credentialProvider)
-                    .withRegion(region)
-                    .build();
-
+            ec2Client = AmazonEC2ClientBuilder.standard()
+                        .withCredentials(credentialProvider)
+                        .withRegion(region)
+                        .build();
         }
-
     }
 
     public AmazonEC2 getClient() throws Exception {
@@ -32,7 +28,7 @@ public class EC2Provisioner {
     }
 
 
-    public List<DrenderInstance> spawnInstances(List<String> nameList, String securityGroup, String sshKeyName, String imageID) {
+    public List<DRenderInstance> spawnInstances(List<String> nameList, String securityGroup, String sshKeyName, String imageID) {
 
         RunInstancesRequest runInstancesRequest =
                 new RunInstancesRequest();
@@ -62,7 +58,7 @@ public class EC2Provisioner {
                 .flatMap(List::stream)
                 .collect(Collectors.toList());
 
-        List<DrenderInstance> drenderInstanceList = new ArrayList<>();
+        List<DRenderInstance> DRenderInstanceList = new ArrayList<>();
         for( int i = 0 ; i < instanceList.size() ; i++){
             Instance instance = instanceList.get(i);
             String name = nameList.get(i);
@@ -70,10 +66,10 @@ public class EC2Provisioner {
             List<Tag> tagList = new ArrayList<>();
             tagList.add(nameTag);
             instance.setTags(tagList);
-            drenderInstanceList.add(new DrenderInstance(instance.getInstanceId(),instance.getPublicIpAddress()));
+            DRenderInstanceList.add(new DRenderInstance(instance.getInstanceId(),instance.getPublicIpAddress()));
         }
 
-        return drenderInstanceList;
+        return DRenderInstanceList;
     }
 
 }

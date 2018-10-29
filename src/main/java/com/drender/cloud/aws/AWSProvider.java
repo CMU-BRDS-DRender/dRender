@@ -1,28 +1,32 @@
 package com.drender.cloud.aws;
 
 import com.amazonaws.AmazonClientException;
-import com.amazonaws.auth.AWSCredentials;
-import com.amazonaws.auth.AWSStaticCredentialsProvider;
-import com.amazonaws.auth.BasicAWSCredentials;
+import com.amazonaws.auth.*;
 import com.drender.cloud.MachineProvider;
 import com.drender.model.cloud.AWSRequestProperty;
-import com.drender.model.cloud.DrenderInstance;
+import com.drender.model.instance.DRenderInstance;
 
-import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 
 public class AWSProvider implements MachineProvider<AWSRequestProperty>{
 
-    private AWSStaticCredentialsProvider credentialProvider;
+    private AWSCredentialsProvider credentialProvider;
     private EC2Provisioner ec2Provisioner;
 
     public AWSProvider(){
-        HashMap<String, String> localAWSCredentials = Credentials.getCredentials();
-        AWSCredentials credentials = null;
         try {
-            credentials = new BasicAWSCredentials(localAWSCredentials.get("AWS_ACCESS_KEY_ID"), localAWSCredentials.get("AWS_ACCESS_KEY_SECRET"));
-            credentialProvider = new AWSStaticCredentialsProvider(credentials);
+            /*
+             * http://docs.aws.amazon.com/AWSJavaSDK/latest/javadoc/com/amazonaws/auth/DefaultAWSCredentialsProviderChain.html
+             *
+             * AWS credentials provider chain that looks for credentials in this order:
+             *   1. Environment Variables - AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY
+             *   2. Java System Properties - aws.accessKeyId and aws.secretKey
+             *   3. Credential profiles file at the default location (~/.aws/credentials) shared by all AWS SDKs and the AWS CLI
+             *   4. Credentials delivered through the Amazon EC2 container service if AWS_CONTAINER_CREDENTIALS_RELATIVE_URI"
+             *       environment variable is set and security manager has permission to access the variable
+             *   5. Instance profile credentials delivered through the Amazon EC2 metadata service
+             */
+            credentialProvider = new DefaultAWSCredentialsProviderChain();
         } catch (Exception e) {
             throw new AmazonClientException(
                     "Cannot load the credentials from the credential profiles file.Please make sure that your credentials file is at the correct ",
@@ -31,18 +35,18 @@ public class AWSProvider implements MachineProvider<AWSRequestProperty>{
     }
 
     @Override
-    public List<DrenderInstance> startMachines(AWSRequestProperty property) {
+    public List<DRenderInstance> startMachines(AWSRequestProperty property) {
         ec2Provisioner = new EC2Provisioner(property.getRegion(), credentialProvider);
         return ec2Provisioner.spawnInstances(property.getNameList(),property.getSecurityGroup(),property.getSshKeyName(),property.getMachineImageId());
     }
 
     @Override
-    public String machineStatus(DrenderInstance instance) {
+    public String machineStatus(DRenderInstance instance) {
         return null;
     }
 
     @Override
-    public boolean killMachine(DrenderInstance instance) {
+    public boolean killMachine(DRenderInstance instance) {
         return false;
     }
 
