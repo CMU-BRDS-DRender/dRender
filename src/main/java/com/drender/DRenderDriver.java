@@ -5,6 +5,7 @@ import com.drender.eventprocessors.DRenderLogger;
 import com.drender.eventprocessors.HeartbeatVerticle;
 import com.drender.eventprocessors.ResourceManager;
 import com.drender.model.*;
+import com.drender.model.cloud.S3Source;
 import com.drender.model.instance.DRenderInstance;
 import com.drender.model.job.Job;
 import com.drender.model.job.JobAction;
@@ -14,6 +15,7 @@ import com.drender.model.project.Project;
 import com.drender.model.project.ProjectRequest;
 import com.drender.model.project.ProjectResponse;
 import io.vertx.core.AbstractVerticle;
+import io.vertx.core.Future;
 import io.vertx.core.eventbus.EventBus;
 import io.vertx.core.json.Json;
 import io.vertx.core.json.JsonObject;
@@ -87,7 +89,8 @@ public class DRenderDriver extends AbstractVerticle {
         List<Job> jobList = new ArrayList<>(projectJobs.get(project).values());
         List<DRenderInstance> instances = spawnMachines(cloudAMI, jobList);
 
-        String outputURI = "";
+        // Get output folder
+        S3Source outputURI = getOutputSource(project).result();
 
         // Updates each job with newly retrieved IPs and outputURI
         updateJobs(project, instances, outputURI);
@@ -130,7 +133,7 @@ public class DRenderDriver extends AbstractVerticle {
         return projectJobs.get(project).keySet().size();
     }
 
-    private void updateJobs(Project project, List<DRenderInstance> instances, String outputURI) {
+    private void updateJobs(Project project, List<DRenderInstance> instances, S3Source outputURI) {
         Map<String, Job> jobMap = projectJobs.get(project);
 
         int instanceIdx = 0;
@@ -181,6 +184,22 @@ public class DRenderDriver extends AbstractVerticle {
         );
 
         return ips;
+    }
+
+    private Future<S3Source> getOutputSource(Project project) {
+        EventBus eventBus = vertx.eventBus();
+
+        final Future<S3Source> future = Future.future();
+
+        eventBus.send(Channels.STORAGE_MANAGER, project.getID(),
+            ar -> {
+                if (ar.succeeded()) {
+                    future.complete(Json.decodeValue(ar.result().body().toString(), S3Source.class));
+                }
+            }
+        );
+
+        return future;
     }
 
     private long scheduleHeartbeat(Job job) {

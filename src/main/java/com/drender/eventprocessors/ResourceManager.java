@@ -1,9 +1,12 @@
 package com.drender.eventprocessors;
 
+import com.drender.cloud.StorageProvider;
 import com.drender.cloud.aws.AWSProvider;
 import com.drender.cloud.MachineProvider;
+import com.drender.cloud.aws.S3BucketProvisioner;
 import com.drender.model.Channels;
 import com.drender.model.cloud.AWSRequestProperty;
+import com.drender.model.cloud.S3Source;
 import com.drender.model.instance.DRenderInstance;
 import com.drender.model.instance.InstanceResponse;
 import com.drender.model.job.Job;
@@ -21,6 +24,7 @@ public class ResourceManager extends AbstractVerticle {
         Currently setup for AWS
      */
     private MachineProvider<AWSRequestProperty> machineProvider = new AWSProvider();
+    private StorageProvider storageProvider = new S3BucketProvisioner();
 
     @Override
     public void start() throws Exception {
@@ -29,7 +33,7 @@ public class ResourceManager extends AbstractVerticle {
                 .handler(message -> {
                     InstanceRequest instanceRequest = Json.decodeValue(message.body().toString(), InstanceRequest.class);
 
-                    System.out.println("ResourceManager: Received new request: ");
+                    System.out.println("InstanceManager: Received new request");
                     System.out.println(Json.encode(instanceRequest));
 
                     InstanceResponse response = new InstanceResponse("success", getNewInstances(instanceRequest.getJobs()));
@@ -38,7 +42,12 @@ public class ResourceManager extends AbstractVerticle {
 
         eventBus.consumer(Channels.STORAGE_MANAGER)
                 .handler(message -> {
-                    
+                    String projectID = message.body().toString();
+
+                    System.out.println("StorageManager: Received new request: " + projectID);
+
+                    S3Source response = storageProvider.createStorage(projectID);
+                    message.reply(Json.encode(response));
                 });
     }
 
