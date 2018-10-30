@@ -5,6 +5,8 @@ import com.amazonaws.services.ec2.AmazonEC2ClientBuilder;
 import com.amazonaws.services.ec2.model.*;
 import com.amazonaws.waiters.WaiterParameters;
 import com.drender.model.instance.DRenderInstance;
+import io.vertx.core.logging.Logger;
+import io.vertx.core.logging.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -13,6 +15,7 @@ import java.util.stream.Collectors;
 public class EC2Provisioner {
 
     private static AmazonEC2 ec2Client = null;
+    private Logger logger = LoggerFactory.getLogger(EC2Provisioner.class);
 
     public EC2Provisioner(String region, AWSCredentialsProvider credentialProvider){
         if(ec2Client == null) {
@@ -68,6 +71,8 @@ public class EC2Provisioner {
             instance.setTags(tagList);
             DRenderInstanceList.add(new DRenderInstance(instance.getInstanceId(),instance.getPublicIpAddress()));
         }
+
+        logger.info("Spawned EC2 instances: {}", DRenderInstanceList);
 
         return DRenderInstanceList;
     }

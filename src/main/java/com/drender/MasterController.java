@@ -8,14 +8,20 @@ import io.vertx.core.AbstractVerticle;
 import io.vertx.core.Future;
 import io.vertx.core.eventbus.EventBus;
 import io.vertx.core.json.Json;
+import io.vertx.core.logging.Logger;
+import io.vertx.core.logging.LoggerFactory;
 import io.vertx.ext.web.Router;
 import io.vertx.ext.web.RoutingContext;
 import io.vertx.ext.web.handler.BodyHandler;
 
 public class MasterController extends AbstractVerticle {
 
+    private Logger logger = LoggerFactory.getLogger(MasterController.class);
+
     @Override
     public void start(Future<Void> future) {
+        logger.info("Starting...");
+
         // deploy Driver
         vertx.deployVerticle(new DRenderDriver());
 
@@ -53,8 +59,7 @@ public class MasterController extends AbstractVerticle {
     private void startProject(RoutingContext routingContext) {
         ProjectRequest projectRequest = Json.decodeValue(routingContext.getBodyAsString(), ProjectRequest.class);
 
-        System.out.println("MasterController: Received new request: ");
-        System.out.println(Json.encode(projectRequest));
+        logger.info("Received new project request: {}", Json.encode(projectRequest));
 
         // Send the start message to Driver
         EventBus eventBus = vertx.eventBus();
@@ -74,6 +79,8 @@ public class MasterController extends AbstractVerticle {
         ProjectRequest projectRequest = ProjectRequest.builder()
                                                     .action(ProjectAction.STATUS)
                                                     .build();
+
+        logger.info("Received status request: {}", Json.encode(projectRequest));
 
         // Send getStatus message to Driver
         EventBus eventBus = vertx.eventBus();

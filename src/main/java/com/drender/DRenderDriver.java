@@ -19,6 +19,8 @@ import io.vertx.core.Future;
 import io.vertx.core.eventbus.EventBus;
 import io.vertx.core.json.Json;
 import io.vertx.core.json.JsonObject;
+import io.vertx.core.logging.Logger;
+import io.vertx.core.logging.LoggerFactory;
 
 import java.util.*;
 
@@ -32,6 +34,8 @@ public class DRenderDriver extends AbstractVerticle {
     // Stores project -> {jobID, heartbeatTimerID} mapping
     private Map<Project, Map<String, Long>> projectTimers;
 
+    private Logger logger = LoggerFactory.getLogger(DRenderDriver.class);
+
     public DRenderDriver(){
         projectJobs = new HashMap<>();
         projectTimers = new HashMap<>();
@@ -39,6 +43,8 @@ public class DRenderDriver extends AbstractVerticle {
 
     @Override
     public void start() throws Exception {
+
+        logger.info("Starting...");
 
         // Deploy all the verticles
         vertx.deployVerticle(new DRenderLogger());
@@ -78,8 +84,7 @@ public class DRenderDriver extends AbstractVerticle {
      * @return
      */
     private ProjectResponse startProject(ProjectRequest projectRequest) {
-        System.out.println("DRenderDriver: Received new request: ");
-        System.out.println(Json.encodePrettily(projectRequest));
+        logger.info("Received new request: {}", Json.encode(projectRequest));
 
         Project project = initProjectParameters(projectRequest);
 

@@ -14,6 +14,8 @@ import com.drender.model.instance.InstanceRequest;
 import io.vertx.core.AbstractVerticle;
 import io.vertx.core.eventbus.EventBus;
 import io.vertx.core.json.Json;
+import io.vertx.core.logging.Logger;
+import io.vertx.core.logging.LoggerFactory;
 
 import java.util.List;
 import java.util.stream.Collectors;
@@ -26,6 +28,8 @@ public class ResourceManager extends AbstractVerticle {
     private MachineProvider<AWSRequestProperty> machineProvider = new AWSProvider();
     private StorageProvider storageProvider = new S3BucketProvisioner();
 
+    private Logger logger = LoggerFactory.getLogger(ResourceManager.class);
+
     @Override
     public void start() throws Exception {
         EventBus eventBus = vertx.eventBus();
@@ -33,10 +37,9 @@ public class ResourceManager extends AbstractVerticle {
                 .handler(message -> {
                     InstanceRequest instanceRequest = Json.decodeValue(message.body().toString(), InstanceRequest.class);
 
-                    System.out.println("InstanceManager: Received new request");
-                    System.out.println(Json.encode(instanceRequest));
+                    logger.info("Received new instance request {}", message.body().toString());
 
-                    InstanceResponse response = new InstanceResponse("success", getNewInstances(instanceRequest.getJobs()));
+                    InstanceResponse response = new InstanceResponse("success", getNewInstances(instanceRequest.getCloudAMI(),instanceRequest.getJobs()));
                     message.reply(Json.encode(response));
                 });
 
@@ -44,20 +47,19 @@ public class ResourceManager extends AbstractVerticle {
                 .handler(message -> {
                     String projectID = message.body().toString();
 
-                    System.out.println("StorageManager: Received new request: " + projectID);
+                    logger.info("Received new storage request {}", projectID);
 
                     S3Source response = storageProvider.createStorage(projectID);
                     message.reply(Json.encode(response));
                 });
     }
 
-    private List<DRenderInstance> getNewInstances(List<Job> jobs) {
+    private List<DRenderInstance> getNewInstances(String cloudAMI, List<Job> jobs) {
         String region = "us-east-1";
-        String imageId = "<image-id>";
         String securityGroupName = "";
         String sshKeyName = "";
         List<String> nameList = jobs.stream().map(Job::getMachineName).collect(Collectors.toList());
-        AWSRequestProperty awsRequestProperty = new AWSRequestProperty(sshKeyName, securityGroupName,nameList, region, imageId);
+        AWSRequestProperty awsRequestProperty = new AWSRequestProperty(sshKeyName, securityGroupName,nameList, region, cloudAMI);
         return machineProvider.startMachines(awsRequestProperty);
     }
 }
