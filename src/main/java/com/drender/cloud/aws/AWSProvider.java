@@ -5,8 +5,12 @@ import com.amazonaws.auth.*;
 import com.drender.cloud.MachineProvider;
 import com.drender.model.cloud.AWSRequestProperty;
 import com.drender.model.instance.DRenderInstance;
+import io.vertx.core.Future;
+import io.vertx.core.Vertx;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.ExecutionException;
 
 public class AWSProvider implements MachineProvider<AWSRequestProperty>{
 
@@ -34,10 +38,21 @@ public class AWSProvider implements MachineProvider<AWSRequestProperty>{
         }
     }
 
+
     @Override
     public List<DRenderInstance> startMachines(AWSRequestProperty property) {
         ec2Provisioner = new EC2Provisioner(property.getRegion(), credentialProvider);
-        return ec2Provisioner.spawnInstances(property.getNameList(),property.getSecurityGroup(),property.getSshKeyName(),property.getMachineImageId());
+        try {
+            List<DRenderInstance> instances =
+                    ec2Provisioner.spawnInstances(property.getNameList(),
+                            property.getSecurityGroup(),
+                            property.getSshKeyName(),
+                            property.getMachineImageId());
+            return instances;
+        } catch (ExecutionException | InterruptedException e) {
+            e.printStackTrace();
+        }
+        return new ArrayList<>();
     }
 
     @Override

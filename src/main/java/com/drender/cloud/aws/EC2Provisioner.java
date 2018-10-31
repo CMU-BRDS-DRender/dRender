@@ -54,24 +54,9 @@ public class EC2Provisioner {
         String[] instanceIds = new String[nameList.size()];
         instanceIds = instanceList.stream().map(Instance::getInstanceId).collect(Collectors.toList()).toArray(instanceIds);
 
-        DescribeInstanceStatusRequest waitRequest = new DescribeInstanceStatusRequest().withInstanceIds(instanceIds);
+        DescribeInstancesRequest waitRequest = new DescribeInstancesRequest().withInstanceIds(instanceIds);
 
-//        ec2Client.waiters().instanceStatusOk().run(new WaiterParameters<DescribeInstanceStatusRequest>().withRequest(waitRequest));
-
-        Future futureOk = ec2Client.waiters().instanceStatusOk().runAsync(new WaiterParameters<DescribeInstanceStatusRequest>().withRequest(waitRequest), new WaiterHandler() {
-
-            @Override
-            public void onWaitSuccess(AmazonWebServiceRequest amazonWebServiceRequest) {
-                System.out.println("Amazon Instance status OK");
-            }
-
-            @Override
-            public void onWaitFailure(Exception e) {
-                e.printStackTrace();
-            }
-        });
-
-        futureOk.get();
+        ec2Client.waiters().instanceRunning().run(new WaiterParameters<DescribeInstancesRequest>().withRequest(waitRequest));
 
         instanceList = ec2Client.describeInstances(new DescribeInstancesRequest()
                 .withInstanceIds(instanceIds))

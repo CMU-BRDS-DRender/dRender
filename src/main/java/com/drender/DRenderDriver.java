@@ -16,7 +16,9 @@ import com.drender.model.project.ProjectRequest;
 import com.drender.model.project.ProjectResponse;
 import io.vertx.core.AbstractVerticle;
 import io.vertx.core.CompositeFuture;
+import io.vertx.core.DeploymentOptions;
 import io.vertx.core.Future;
+import io.vertx.core.eventbus.DeliveryOptions;
 import io.vertx.core.eventbus.EventBus;
 import io.vertx.core.json.Json;
 import io.vertx.core.json.JsonObject;
@@ -50,7 +52,7 @@ public class DRenderDriver extends AbstractVerticle {
         // Deploy all the verticles
         vertx.deployVerticle(new DRenderLogger());
         vertx.deployVerticle(new HeartbeatVerticle());
-        vertx.deployVerticle(new ResourceManager());
+        vertx.deployVerticle(new ResourceManager(), new DeploymentOptions().setMaxWorkerExecuteTime(5* 60L * 1000 * 1000000));
 
         // setup listeners for dRender Driver
         EventBus eventBus = vertx.eventBus();
@@ -59,12 +61,19 @@ public class DRenderDriver extends AbstractVerticle {
                     ProjectRequest projectRequest = Json.decodeValue(message.body().toString(), ProjectRequest.class);
                     switch (projectRequest.getAction()) {
                         case START:
-                            startProject(projectRequest)
-                                    .setHandler(ar -> {
-                                        if (ar.succeeded()) {
-                                            message.reply(Json.encode(ar.result()));
-                                        }
-                                    });
+                            System.out.println("START");
+                            vertx.executeBlocking(future -> {
+                                startProject(projectRequest)
+                                        .setHandler(ar -> {
+                                            if (ar.succeeded()) {
+                                                message.reply(Json.encode(ar.result()));
+                                            } else {
+                                                message.reply(Json.encode(ar.cause()));
+                                            }
+                                        });
+                            }, result -> {
+                                // Nothing needs to be done here
+                            });
                             break;
                         case STATUS:
                         default:
@@ -116,11 +125,18 @@ public class DRenderDriver extends AbstractVerticle {
                             }*/
 
                                             // Start jobs
-                    //        for (Job job : projectJobs.get(project).values()) {
-                    //            job.setAction(JobAction.START_JOB);
-                    //            startJob(job);
-                    //        }
-                        projectResponseFuture.complete(new ProjectResponse());
+//                            for (Job job : projectJobs.get(project).values()) {
+//                                job.setAction(JobAction.START_JOB);
+//                                startJob(job);
+//                            }
+                        ProjectResponse projectResponse =
+                                ProjectResponse.builder()
+                                .id("1")
+                                .startFrame(project.getStartFrame())
+                                .endFrame(project.getEndFrame())
+                                .outputURI("").build();
+                        projectResponseFuture.complete(projectResponse);
+
                     } else {
                         logger.error("Could not create instances or output bucket");
                         projectResponseFuture.fail(new Exception());
@@ -191,12 +207,15 @@ public class DRenderDriver extends AbstractVerticle {
         InstanceRequest instanceRequest = new InstanceRequest(cloudAMI, jobs);
 
         final Future<List<DRenderInstance>> ips = Future.future();
+        final long TIMEOUT = 5 * 60 * 1000; // 5 minutes (in ms)
 
-        eventBus.send(Channels.INSTANCE_MANAGER, Json.encode(instanceRequest),
+        eventBus.send(Channels.INSTANCE_MANAGER, Json.encode(instanceRequest), new DeliveryOptions().setSendTimeout(TIMEOUT),
             ar -> {
                 if (ar.succeeded()) {
                     InstanceResponse response = Json.decodeValue(ar.result().body().toString(), InstanceResponse.class);
                     ips.complete(response.getInstances());
+                } else {
+                    logger.error("Failed to spawn machines: " + ar.cause());
                 }
             }
         );

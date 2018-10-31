@@ -7,6 +7,7 @@ import com.drender.model.project.ProjectRequest;
 import com.drender.model.project.ProjectResponse;
 import io.vertx.core.AbstractVerticle;
 import io.vertx.core.Future;
+import io.vertx.core.eventbus.DeliveryOptions;
 import io.vertx.core.eventbus.EventBus;
 import io.vertx.core.json.Json;
 import io.vertx.core.logging.Logger;
@@ -62,15 +63,19 @@ public class MasterController extends AbstractVerticle {
 
         logger.info("Received new project request: " + Json.encode(projectRequest));
 
+        final long TIMEOUT = 5 * 60 * 1000; // 5 minutes (in ms)
+
         // Send the start message to Driver
         EventBus eventBus = vertx.eventBus();
-        eventBus.send(Channels.DRIVER_PROJECT, Json.encode(projectRequest),
+        eventBus.send(Channels.DRIVER_PROJECT, Json.encode(projectRequest), new DeliveryOptions().setSendTimeout(TIMEOUT),
             ar -> {
                 if (ar.succeeded()) {
                     ProjectResponse response = Json.decodeValue(ar.result().body().toString(), ProjectResponse.class);
                     routingContext.response()
                             .putHeader("content-type", "application/json; charset=utf-8")
                             .end(Json.encode(response));
+                } else {
+                    logger.error("Failed to start project: " + ar.cause());
                 }
             }
         );
