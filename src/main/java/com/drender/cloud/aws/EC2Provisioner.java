@@ -1,8 +1,11 @@
 package com.drender.cloud.aws;
+import com.amazonaws.AmazonWebServiceRequest;
 import com.amazonaws.auth.AWSCredentialsProvider;
 import com.amazonaws.services.ec2.AmazonEC2;
 import com.amazonaws.services.ec2.AmazonEC2ClientBuilder;
 import com.amazonaws.services.ec2.model.*;
+import com.amazonaws.waiters.Waiter;
+import com.amazonaws.waiters.WaiterHandler;
 import com.amazonaws.waiters.WaiterParameters;
 import com.drender.model.instance.DRenderInstance;
 import io.vertx.core.logging.Logger;
@@ -10,6 +13,8 @@ import io.vertx.core.logging.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Future;
 import java.util.stream.Collectors;
 
 public class EC2Provisioner {
@@ -31,7 +36,7 @@ public class EC2Provisioner {
     }
 
 
-    public List<DRenderInstance> spawnInstances(List<String> nameList, String securityGroup, String sshKeyName, String imageID) {
+    public List<DRenderInstance> spawnInstances(List<String> nameList, String securityGroup, String sshKeyName, String imageID) throws ExecutionException, InterruptedException {
 
         RunInstancesRequest runInstancesRequest =
                 new RunInstancesRequest();
@@ -51,7 +56,22 @@ public class EC2Provisioner {
 
         DescribeInstanceStatusRequest waitRequest = new DescribeInstanceStatusRequest().withInstanceIds(instanceIds);
 
-        ec2Client.waiters().instanceStatusOk().run(new WaiterParameters<DescribeInstanceStatusRequest>().withRequest(waitRequest));
+//        ec2Client.waiters().instanceStatusOk().run(new WaiterParameters<DescribeInstanceStatusRequest>().withRequest(waitRequest));
+
+        Future futureOk = ec2Client.waiters().instanceStatusOk().runAsync(new WaiterParameters<DescribeInstanceStatusRequest>().withRequest(waitRequest), new WaiterHandler() {
+
+            @Override
+            public void onWaitSuccess(AmazonWebServiceRequest amazonWebServiceRequest) {
+                System.out.println("Amazon Instance status OK");
+            }
+
+            @Override
+            public void onWaitFailure(Exception e) {
+                e.printStackTrace();
+            }
+        });
+
+        futureOk.get();
 
         instanceList = ec2Client.describeInstances(new DescribeInstancesRequest()
                 .withInstanceIds(instanceIds))
