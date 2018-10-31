@@ -15,6 +15,7 @@ import com.drender.model.project.Project;
 import com.drender.model.project.ProjectRequest;
 import com.drender.model.project.ProjectResponse;
 import io.vertx.core.AbstractVerticle;
+import io.vertx.core.CompositeFuture;
 import io.vertx.core.Future;
 import io.vertx.core.eventbus.EventBus;
 import io.vertx.core.json.Json;
@@ -56,17 +57,19 @@ public class DRenderDriver extends AbstractVerticle {
         eventBus.consumer(Channels.DRIVER_PROJECT)
                 .handler(message -> {
                     ProjectRequest projectRequest = Json.decodeValue(message.body().toString(), ProjectRequest.class);
-                    ProjectResponse projectResponse;
                     switch (projectRequest.getAction()) {
                         case START:
-                            projectResponse = startProject(projectRequest);
+                            startProject(projectRequest)
+                                    .setHandler(ar -> {
+                                        if (ar.succeeded()) {
+                                            message.reply(Json.encode(ar.result()));
+                                        }
+                                    });
                             break;
                         case STATUS:
                         default:
-                            projectResponse = getStatus();
+                            getStatus();
                     }
-
-                    message.reply(Json.encode(projectResponse));
                 });
     }
 
@@ -83,8 +86,8 @@ public class DRenderDriver extends AbstractVerticle {
      * @param projectRequest
      * @return
      */
-    private ProjectResponse startProject(ProjectRequest projectRequest) {
-        logger.info("Received new request: {}", Json.encode(projectRequest));
+    private Future<ProjectResponse> startProject(ProjectRequest projectRequest) {
+        logger.info("Received new request: " + Json.encode(projectRequest));
 
         Project project = initProjectParameters(projectRequest);
 
@@ -92,29 +95,39 @@ public class DRenderDriver extends AbstractVerticle {
         prepareJobs(project);
 
         List<Job> jobList = new ArrayList<>(projectJobs.get(project).values());
-        List<DRenderInstance> instances = spawnMachines(cloudAMI, jobList);
 
-        // Get output folder
-        S3Source outputURI = getOutputSource(project).result();
+        Future<List<DRenderInstance>> instancesFuture = spawnMachines(cloudAMI, jobList);
+        Future<S3Source> outputURIFuture = getOutputSource(project);
+        Future<ProjectResponse> projectResponseFuture = Future.future();
 
-        // Updates each job with newly retrieved IPs and outputURI
-        updateJobs(project, instances, outputURI);
+        CompositeFuture.all(instancesFuture, outputURIFuture)
+                .setHandler(ar -> {
+                    if (ar.succeeded()) {
+                        List<DRenderInstance> instances = instancesFuture.result();
+                        S3Source outputURI = outputURIFuture.result();
+                        // Updates each job with newly retrieved IPs and outputURI
+                        updateJobs(project, instances, outputURI);
+                        // Schedule heartbeat checks for the newly created jobs
+                            /*for (Job job : projectJobs.get(project).values()) {
+                                job.setAction(JobAction.HEARTBEAT_CHECK);
+                                long timerID = scheduleHeartbeat(job);
+                                // update timer map
+                                projectTimers.get(project).put(job.getID(), timerID);
+                            }*/
 
-        // Schedule heartbeat checks for the newly created jobs
-        /*for (Job job : projectJobs.get(project).values()) {
-            job.setAction(JobAction.HEARTBEAT_CHECK);
-            long timerID = scheduleHeartbeat(job);
-            // update timer map
-            projectTimers.get(project).put(job.getID(), timerID);
-        }*/
+                                            // Start jobs
+                    //        for (Job job : projectJobs.get(project).values()) {
+                    //            job.setAction(JobAction.START_JOB);
+                    //            startJob(job);
+                    //        }
+                        projectResponseFuture.complete(new ProjectResponse());
+                    } else {
+                        logger.error("Could not create instances or output bucket");
+                        projectResponseFuture.fail(new Exception());
+                    }
+                });
 
-        // Start jobs
-        for (Job job : projectJobs.get(project).values()) {
-            job.setAction(JobAction.START_JOB);
-            startJob(job);
-        }
-
-        return new ProjectResponse();
+        return projectResponseFuture;
     }
 
     private Project initProjectParameters(ProjectRequest projectRequest) {
@@ -173,17 +186,17 @@ public class DRenderDriver extends AbstractVerticle {
         return jobMap;
     }
 
-    private List<DRenderInstance> spawnMachines(String cloudAMI, List<Job> jobs) {
+    private Future<List<DRenderInstance>> spawnMachines(String cloudAMI, List<Job> jobs) {
         EventBus eventBus = vertx.eventBus();
         InstanceRequest instanceRequest = new InstanceRequest(cloudAMI, jobs);
 
-        List<DRenderInstance> ips = new ArrayList<>();
+        final Future<List<DRenderInstance>> ips = Future.future();
 
         eventBus.send(Channels.INSTANCE_MANAGER, Json.encode(instanceRequest),
             ar -> {
                 if (ar.succeeded()) {
                     InstanceResponse response = Json.decodeValue(ar.result().body().toString(), InstanceResponse.class);
-                    ips.addAll(response.getInstances());
+                    ips.complete(response.getInstances());
                 }
             }
         );

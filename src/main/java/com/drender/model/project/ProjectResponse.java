@@ -14,6 +14,7 @@ import lombok.*;
 public class ProjectResponse {
     private String id;
     private String software;
+
     private S3Source source;
     private int startFrame;
     private int endFrame;

@@ -37,7 +37,7 @@ public class ResourceManager extends AbstractVerticle {
                 .handler(message -> {
                     InstanceRequest instanceRequest = Json.decodeValue(message.body().toString(), InstanceRequest.class);
 
-                    logger.info("Received new instance request {}", message.body().toString());
+                    logger.info("Received new instance request " + message.body().toString());
 
                     InstanceResponse response = new InstanceResponse("success", getNewInstances(instanceRequest.getCloudAMI(),instanceRequest.getJobs()));
                     message.reply(Json.encode(response));
@@ -47,7 +47,7 @@ public class ResourceManager extends AbstractVerticle {
                 .handler(message -> {
                     String projectID = message.body().toString();
 
-                    logger.info("Received new storage request {}", projectID);
+                    logger.info("Received new storage request " +  projectID);
 
                     S3Source response = storageProvider.createStorage(projectID);
                     message.reply(Json.encode(response));
@@ -55,9 +55,9 @@ public class ResourceManager extends AbstractVerticle {
     }
 
     private List<DRenderInstance> getNewInstances(String cloudAMI, List<Job> jobs) {
-        String region = "us-east-1";
-        String securityGroupName = "";
-        String sshKeyName = "";
+        String region = "us-east-1a";
+        String securityGroupName = "default";
+        String sshKeyName = "drender";
         List<String> nameList = jobs.stream().map(Job::getMachineName).collect(Collectors.toList());
         AWSRequestProperty awsRequestProperty = new AWSRequestProperty(sshKeyName, securityGroupName,nameList, region, cloudAMI);
         return machineProvider.startMachines(awsRequestProperty);

@@ -37,7 +37,7 @@ public class EC2Provisioner {
                 new RunInstancesRequest();
 
         runInstancesRequest.withImageId(imageID)
-                .withInstanceType(InstanceType.T1Micro)
+                .withInstanceType(InstanceType.T2Micro)
                 .withMinCount(nameList.size())
                 .withMaxCount(nameList.size())
                 .withKeyName(sshKeyName)
@@ -72,7 +72,7 @@ public class EC2Provisioner {
             DRenderInstanceList.add(new DRenderInstance(instance.getInstanceId(),instance.getPublicIpAddress()));
         }
 
-        logger.info("Spawned EC2 instances: {}", DRenderInstanceList);
+        logger.info("Spawned EC2 instances: " + DRenderInstanceList);
 
         return DRenderInstanceList;
     }

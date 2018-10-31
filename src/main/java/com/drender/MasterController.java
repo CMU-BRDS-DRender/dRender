@@ -1,6 +1,7 @@
 package com.drender;
 
 import com.drender.model.Channels;
+import com.drender.model.cloud.S3Source;
 import com.drender.model.project.ProjectAction;
 import com.drender.model.project.ProjectRequest;
 import com.drender.model.project.ProjectResponse;
@@ -59,7 +60,7 @@ public class MasterController extends AbstractVerticle {
     private void startProject(RoutingContext routingContext) {
         ProjectRequest projectRequest = Json.decodeValue(routingContext.getBodyAsString(), ProjectRequest.class);
 
-        logger.info("Received new project request: {}", Json.encode(projectRequest));
+        logger.info("Received new project request: " + Json.encode(projectRequest));
 
         // Send the start message to Driver
         EventBus eventBus = vertx.eventBus();
@@ -80,7 +81,7 @@ public class MasterController extends AbstractVerticle {
                                                     .action(ProjectAction.STATUS)
                                                     .build();
 
-        logger.info("Received status request: {}", Json.encode(projectRequest));
+        logger.info("Received status request: " + Json.encode(projectRequest));
 
         // Send getStatus message to Driver
         EventBus eventBus = vertx.eventBus();

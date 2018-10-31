@@ -1,6 +1,8 @@
 package com.drender.model.project;
 
 import com.drender.model.cloud.S3Source;
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
 import lombok.*;
 
 @Getter
