@@ -17,6 +17,6 @@ public class ProjectResponse {
     private S3Source source;
     private int startFrame;
     private int endFrame;
-    private String outputURI;
+    private S3Source outputURI;
     private JsonObject log;
 }

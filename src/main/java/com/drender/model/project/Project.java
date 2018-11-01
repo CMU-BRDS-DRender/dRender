@@ -15,5 +15,5 @@ public class Project {
     private S3Source source;
     private int startFrame;
     private int endFrame;
-    private String outputURI;
+    private S3Source outputURI;
 }

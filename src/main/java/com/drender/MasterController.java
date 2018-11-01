@@ -38,7 +38,7 @@ public class MasterController extends AbstractVerticle {
             .handler(this::startProject);
 
         // Status of project
-        router.get("/status")
+        router.get("/status/:projectID")
             .handler(this::status);
 
         vertx
@@ -58,6 +58,10 @@ public class MasterController extends AbstractVerticle {
                 );
     }
 
+    /**
+     * /start/
+     * @param routingContext
+     */
     private void startProject(RoutingContext routingContext) {
         ProjectRequest projectRequest = Json.decodeValue(routingContext.getBodyAsString(), ProjectRequest.class);
 
@@ -81,8 +85,13 @@ public class MasterController extends AbstractVerticle {
         );
     }
 
+    /**
+     * /status/:projectID
+     * @param routingContext
+     */
     private void status(RoutingContext routingContext) {
         ProjectRequest projectRequest = ProjectRequest.builder()
+                                                    .id(routingContext.request().getParam("projectID"))
                                                     .action(ProjectAction.STATUS)
                                                     .build();
 

@@ -24,9 +24,11 @@ public class Job {
     private int endFrame;
     private JobAction action;
     private S3Source outputURI;
+    private String messageQ;
 
     @Builder
-    public Job(DRenderInstance instance, String projectID, S3Source source, int startFrame, int endFrame, JobAction action, S3Source outputURI) {
+    public Job(DRenderInstance instance, String projectID, S3Source source, int startFrame, int endFrame,
+               JobAction action, S3Source outputURI, String messageQ) {
         this.ID = UUID.randomUUID().toString();
         this.projectID = projectID;
         this.source = source;
@@ -35,6 +37,7 @@ public class Job {
         this.endFrame = endFrame;
         this.action = action;
         this.outputURI = outputURI;
+        this.messageQ = messageQ;
         this.machineName = projectID + "_" + ID + "_" + startFrame + "_" + endFrame;
     }
 }

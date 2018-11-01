@@ -32,16 +32,21 @@ public class DRenderDriver extends AbstractVerticle {
     private final int FRAMES_PER_MACHINE = 20;
     private final int HEARTBEAT_TIMER = 150000;
 
-    // Stores project -> {jobID, Job} mapping
-    private Map<Project, Map<String, Job>> projectJobs;
-    // Stores project -> {jobID, heartbeatTimerID} mapping
-    private Map<Project, Map<String, Long>> projectTimers;
+    // Stores projectID ->  project mapping
+    private Map<String, Project> projects;
+    // Stores projectID -> {jobID, Job} mapping
+    private Map<String, Map<String, Job>> projectJobs;
+    // Stores projectID -> {jobID, heartbeatTimerID} mapping
+    private Map<String, Map<String, Long>> projectTimers;
+    // Stores projectID -> {jobID, frameSet} mapping
+    private Map<String, Map<String, Set<Integer>>> projectJobsFrames;
 
     private Logger logger = LoggerFactory.getLogger(DRenderDriver.class);
 
     public DRenderDriver(){
         projectJobs = new HashMap<>();
         projectTimers = new HashMap<>();
+        projectJobsFrames = new HashMap<>();
     }
 
     @Override
@@ -60,24 +65,28 @@ public class DRenderDriver extends AbstractVerticle {
                 .handler(message -> {
                     ProjectRequest projectRequest = Json.decodeValue(message.body().toString(), ProjectRequest.class);
                     switch (projectRequest.getAction()) {
+                        /*
+                         * START is run in worker (executor) threads by vertx as a blocking operation.
+                         * This is done as spawning of instances takes time. This prevents the blocking of event loop.
+                         */
                         case START:
-                            System.out.println("START");
                             vertx.executeBlocking(future -> {
                                 startProject(projectRequest)
-                                        .setHandler(ar -> {
-                                            if (ar.succeeded()) {
-                                                message.reply(Json.encode(ar.result()));
-                                            } else {
-                                                message.reply(Json.encode(ar.cause()));
-                                            }
-                                        });
+                                    .setHandler(ar -> {
+                                        if (ar.succeeded()) {
+                                            message.reply(Json.encode(ar.result()));
+                                        } else {
+                                            message.reply(Json.encode(ar.cause()));
+                                        }
+                                    });
                             }, result -> {
                                 // Nothing needs to be done here
                             });
                             break;
                         case STATUS:
+                            message.reply(Json.encode(getStatus(projectRequest.getId())));
+                            break;
                         default:
-                            getStatus();
                     }
                 });
     }
@@ -99,11 +108,12 @@ public class DRenderDriver extends AbstractVerticle {
         logger.info("Received new request: " + Json.encode(projectRequest));
 
         Project project = initProjectParameters(projectRequest);
+        projects.put(project.getID(), project);
 
         String cloudAMI = ImageFactory.getImageAMI(project.getSoftware());
         prepareJobs(project);
 
-        List<Job> jobList = new ArrayList<>(projectJobs.get(project).values());
+        List<Job> jobList = new ArrayList<>(projectJobs.get(project.getID()).values());
 
         Future<List<DRenderInstance>> instancesFuture = spawnMachines(cloudAMI, jobList);
         Future<S3Source> outputURIFuture = getOutputSource(project);
@@ -114,8 +124,10 @@ public class DRenderDriver extends AbstractVerticle {
                     if (ar.succeeded()) {
                         List<DRenderInstance> instances = instancesFuture.result();
                         S3Source outputURI = outputURIFuture.result();
+                        project.setOutputURI(outputURI);
                         // Updates each job with newly retrieved IPs and outputURI
                         updateJobs(project, instances, outputURI);
+
                         // Schedule heartbeat checks for the newly created jobs
                             /*for (Job job : projectJobs.get(project).values()) {
                                 job.setAction(JobAction.HEARTBEAT_CHECK);
@@ -129,13 +141,8 @@ public class DRenderDriver extends AbstractVerticle {
 //                                job.setAction(JobAction.START_JOB);
 //                                startJob(job);
 //                            }
-                        ProjectResponse projectResponse =
-                                ProjectResponse.builder()
-                                .id("1")
-                                .startFrame(project.getStartFrame())
-                                .endFrame(project.getEndFrame())
-                                .outputURI("").build();
-                        projectResponseFuture.complete(projectResponse);
+
+                        projectResponseFuture.complete(buildStatus(project));
 
                     } else {
                         logger.error("Could not create instances or output bucket");
@@ -146,6 +153,11 @@ public class DRenderDriver extends AbstractVerticle {
         return projectResponseFuture;
     }
 
+    /**
+     * Initializes project, generates jobs and updates the project->job map
+     * @param projectRequest
+     * @return
+     */
     private Project initProjectParameters(ProjectRequest projectRequest) {
         Project project = Project.builder()
                             .ID(projectRequest.getId())
@@ -158,17 +170,47 @@ public class DRenderDriver extends AbstractVerticle {
 
         // update project map
         Map<String, Job> jobMap = prepareJobs(project);
-        projectJobs.put(project, jobMap);
+        projectJobs.put(project.getID(), jobMap);
 
         return project;
     }
 
-    private int getMachineCount(Project project) {
-        return projectJobs.get(project).keySet().size();
+    /**
+     * Constructs log object for this project. This is used to construct
+     * current status of the jobs in the project.
+     * @param project
+     * @return
+     */
+    private JsonObject constructLog(Project project) {
+        JsonObject log = new JsonObject();
+        List<JsonObject> jobs = new ArrayList<>();
+
+        for (Job job : projectJobs.get(project.getID()).values()) {
+            jobs.add(
+                new JsonObject()
+                .put("id", job.getID())
+                .put("startFrame", job.getStartFrame())
+                .put("endFrame", job.getEndFrame())
+                .put("instanceInfo", job.getInstance())
+                .put("framesRendered", projectJobsFrames.get(project.getID()).get(job.getID()).size())
+            );
+        }
+        log.put("jobs", jobs);
+        return log;
     }
 
+    private int getMachineCount(Project project) {
+        return projectJobs.get(project.getID()).keySet().size();
+    }
+
+    /**
+     * Assigns jobs to instances, and also updates S3 output path
+     * @param project
+     * @param instances
+     * @param outputURI
+     */
     private void updateJobs(Project project, List<DRenderInstance> instances, S3Source outputURI) {
-        Map<String, Job> jobMap = projectJobs.get(project);
+        Map<String, Job> jobMap = projectJobs.get(project.getID());
 
         int instanceIdx = 0;
 
@@ -178,6 +220,13 @@ public class DRenderDriver extends AbstractVerticle {
         }
     }
 
+    /**
+     * Prepares Jobs based on the number of frames to be rendered.
+     * Uses static FRAMES_PER_MACHINE to divide frames among Jobs.
+     * Sets the job action to START_NEW_MACHINE
+     * @param project
+     * @return
+     */
     private Map<String, Job> prepareJobs(Project project) {
         int currentFrame = project.getStartFrame();
         Map<String, Job> jobMap = new HashMap<>();
@@ -198,10 +247,17 @@ public class DRenderDriver extends AbstractVerticle {
 
             currentFrame += FRAMES_PER_MACHINE;
         }
-
         return jobMap;
     }
 
+    /**
+     * Asynchronously spawns machines. Number of machines spawned is equal to number of jobs to run.
+     * Communicates with ResourceManager through messages in the event queue.
+     * Callback returns the instances to caller once complete.
+     * @param cloudAMI
+     * @param jobs
+     * @return
+     */
     private Future<List<DRenderInstance>> spawnMachines(String cloudAMI, List<Job> jobs) {
         EventBus eventBus = vertx.eventBus();
         InstanceRequest instanceRequest = new InstanceRequest(cloudAMI, jobs);
@@ -223,6 +279,11 @@ public class DRenderDriver extends AbstractVerticle {
         return ips;
     }
 
+    /**
+     * Asynchronously creates a bucket in S3 for the project.
+     * @param project
+     * @return
+     */
     private Future<S3Source> getOutputSource(Project project) {
         EventBus eventBus = vertx.eventBus();
 
@@ -239,6 +300,12 @@ public class DRenderDriver extends AbstractVerticle {
         return future;
     }
 
+    /**
+     * Schedules timed heartbeat checks for the given Job.
+     * Does not expect a reply, since if the machine runs okay, nothing needs to be done.
+     * @param job
+     * @return
+     */
     private long scheduleHeartbeat(Job job) {
         long timerId = vertx.setPeriodic(HEARTBEAT_TIMER, id -> {
             EventBus eventBus = vertx.eventBus();
@@ -248,20 +315,42 @@ public class DRenderDriver extends AbstractVerticle {
         return timerId;
     }
 
+    /**
+     * Asynchronously starts the job in the machine associated with the job.
+     * Sends START_JOB message to JobManager. 
+     * @param job
+     */
     private void startJob(Job job) {
         EventBus eventBus = vertx.eventBus();
         eventBus.send(Channels.JOB_MANAGER, Json.encode(job),
             ar -> {
                 if (ar.succeeded()) {
-                    System.out.println("DRenderDriver: " + ar.result().body());
+                    logger.info("Started Job: " + ar.result().body());
+                } else {
+                    logger.error("Could not start Job: " + ar.cause());
                 }
             }
         );
     }
 
-    private ProjectResponse getStatus() {
+    private ProjectResponse buildStatus(Project project) {
         return ProjectResponse.builder()
-                .log(new JsonObject("{\"message\" : \"All good\" }"))
-                .build();
+                        .id(project.getID())
+                        .source(project.getSource())
+                        .startFrame(project.getStartFrame())
+                        .endFrame(project.getEndFrame())
+                        .software(project.getSoftware())
+                        .outputURI(project.getOutputURI())
+                        .log(constructLog(project)).build();
+    }
+
+    /**
+     * Returns current status of the project.
+     * Includes logs of the jobs running currently, and their statuses
+     * @param projectID
+     * @return
+     */
+    private ProjectResponse getStatus(String projectID) {
+        return buildStatus(projects.get(projectID));
     }
 }
