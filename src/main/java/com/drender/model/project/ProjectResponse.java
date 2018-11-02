@@ -2,6 +2,8 @@ package com.drender.model.project;
 
 import com.drender.model.cloud.S3Source;
 import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 import io.vertx.core.json.JsonObject;
 import lombok.*;
 
@@ -18,5 +20,8 @@ public class ProjectResponse {
     private int startFrame;
     private int endFrame;
     private S3Source outputURI;
+    private boolean isComplete;
+
+    @JsonDeserialize(using = JsonObjectDeserializer.class)
     private JsonObject log;
 }

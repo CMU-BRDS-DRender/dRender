@@ -16,7 +16,7 @@ import java.util.UUID;
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public class Job {
     private String ID;
-    private String machineName;
+    //private String machineName;
     private String projectID;
     private S3Source source;
     private DRenderInstance instance;
@@ -25,6 +25,7 @@ public class Job {
     private JobAction action;
     private S3Source outputURI;
     private String messageQ;
+    private boolean isActive;
 
     @Builder
     public Job(DRenderInstance instance, String projectID, S3Source source, int startFrame, int endFrame,
@@ -38,6 +39,6 @@ public class Job {
         this.action = action;
         this.outputURI = outputURI;
         this.messageQ = messageQ;
-        this.machineName = projectID + "_" + ID + "_" + startFrame + "_" + endFrame;
+        //this.machineName = projectID + "_" + ID + "_" + startFrame + "_" + endFrame;
     }
 }

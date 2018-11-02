@@ -1,6 +1,6 @@
 package com.drender.eventprocessors;
 
-import com.drender.cloud.utils.HttpUtils;
+import com.drender.utils.HttpUtils;
 import com.drender.model.Channels;
 import com.drender.model.job.Job;
 import com.drender.model.job.JobResponse;
@@ -25,7 +25,7 @@ public class JobManager extends AbstractVerticle {
                     Job job = Json.decodeValue(message.body().toString(), Job.class);
 
                     switch (job.getAction()) {
-                        case START_JOB:
+                        case START:
                             httpUtils.post(job.getInstance().getIp(), "/start", 8080, job, JobResponse.class)
                                     .setHandler(ar -> {
                                         if (ar.succeeded()) {

@@ -40,7 +40,7 @@ public class ResourceManager extends AbstractVerticle {
 
                             logger.info("Received new instance request " + message.body().toString());
 
-                            List<DRenderInstance> instances = getNewInstances(instanceRequest.getCloudAMI(), instanceRequest.getJobs());
+                            List<DRenderInstance> instances = getNewInstances(instanceRequest.getCloudAMI(), instanceRequest.getCount());
 
                             future.complete(instances);
 
@@ -63,12 +63,11 @@ public class ResourceManager extends AbstractVerticle {
                 });
     }
 
-    private List<DRenderInstance> getNewInstances(String cloudAMI, List<Job> jobs) {
+    private List<DRenderInstance> getNewInstances(String cloudAMI, int count) {
         String region = "us-east-1a";
         String securityGroupName = "default";
         String sshKeyName = "drender";
-        List<String> nameList = jobs.stream().map(Job::getMachineName).collect(Collectors.toList());
-        AWSRequestProperty awsRequestProperty = new AWSRequestProperty(sshKeyName, securityGroupName,nameList, region, cloudAMI);
+        AWSRequestProperty awsRequestProperty = new AWSRequestProperty(sshKeyName, securityGroupName, count, region, cloudAMI);
         return machineProvider.startMachines(awsRequestProperty);
     }
 }

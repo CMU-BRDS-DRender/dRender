@@ -36,22 +36,22 @@ public class EC2Provisioner {
     }
 
 
-    public List<DRenderInstance> spawnInstances(List<String> nameList, String securityGroup, String sshKeyName, String imageID) throws ExecutionException, InterruptedException {
+    public List<DRenderInstance> spawnInstances(int count, String securityGroup, String sshKeyName, String imageID) throws ExecutionException, InterruptedException {
 
         RunInstancesRequest runInstancesRequest =
                 new RunInstancesRequest();
 
         runInstancesRequest.withImageId(imageID)
                 .withInstanceType(InstanceType.T2Micro)
-                .withMinCount(nameList.size())
-                .withMaxCount(nameList.size())
+                .withMinCount(count)
+                .withMaxCount(count)
                 .withKeyName(sshKeyName)
                 .withSecurityGroups(securityGroup);
 
         RunInstancesResult result = ec2Client.runInstances(runInstancesRequest);
 
         List<Instance> instanceList = result.getReservation().getInstances();
-        String[] instanceIds = new String[nameList.size()];
+        String[] instanceIds = new String[count];
         instanceIds = instanceList.stream().map(Instance::getInstanceId).collect(Collectors.toList()).toArray(instanceIds);
 
         DescribeInstancesRequest waitRequest = new DescribeInstancesRequest().withInstanceIds(instanceIds);
@@ -69,11 +69,11 @@ public class EC2Provisioner {
         List<DRenderInstance> DRenderInstanceList = new ArrayList<>();
         for( int i = 0 ; i < instanceList.size() ; i++){
             Instance instance = instanceList.get(i);
-            String name = nameList.get(i);
-            Tag nameTag = new Tag("Name", name);
-            List<Tag> tagList = new ArrayList<>();
-            tagList.add(nameTag);
-            instance.setTags(tagList);
+            //String name = nameList.get(i);
+            //Tag nameTag = new Tag("Name", name);
+            //List<Tag> tagList = new ArrayList<>();
+            //tagList.add(nameTag);
+            //instance.setTags(tagList);
             DRenderInstanceList.add(new DRenderInstance(instance.getInstanceId(),instance.getPublicIpAddress()));
         }
 

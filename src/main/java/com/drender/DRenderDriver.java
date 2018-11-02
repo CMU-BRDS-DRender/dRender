@@ -6,11 +6,9 @@ import com.drender.eventprocessors.HeartbeatVerticle;
 import com.drender.eventprocessors.ResourceManager;
 import com.drender.model.*;
 import com.drender.model.cloud.S3Source;
-import com.drender.model.instance.DRenderInstance;
+import com.drender.model.instance.*;
 import com.drender.model.job.Job;
 import com.drender.model.job.JobAction;
-import com.drender.model.instance.InstanceRequest;
-import com.drender.model.instance.InstanceResponse;
 import com.drender.model.project.Project;
 import com.drender.model.project.ProjectRequest;
 import com.drender.model.project.ProjectResponse;
@@ -21,11 +19,14 @@ import io.vertx.core.Future;
 import io.vertx.core.eventbus.DeliveryOptions;
 import io.vertx.core.eventbus.EventBus;
 import io.vertx.core.json.Json;
+import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import io.vertx.core.logging.Logger;
 import io.vertx.core.logging.LoggerFactory;
 
 import java.util.*;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 public class DRenderDriver extends AbstractVerticle {
 
@@ -33,10 +34,14 @@ public class DRenderDriver extends AbstractVerticle {
     private final int HEARTBEAT_TIMER = 150000;
 
     // Stores projectID ->  project mapping
-    private Map<String, Project> projects;
-    // Stores projectID -> {jobID, Job} mapping
-    private Map<String, Map<String, Job>> projectJobs;
-    // Stores projectID -> {jobID, heartbeatTimerID} mapping
+    private Map<String, Project> projectMap;
+    // Stores jobID -> job mapping
+    private Map<String, Job> jobMap;
+    // Stores projectID -> [jobID] mapping
+    private Map<String, List<String>> projectJobs;
+    // Stores instanceID -> [jobIDs] mapping
+    private Map<DRenderInstance, List<String>> instanceJobs;
+    // Stores projectID -> {instanceID, heartbeatTimerID} mapping
     private Map<String, Map<String, Long>> projectTimers;
     // Stores projectID -> {jobID, frameSet} mapping
     private Map<String, Map<String, Set<Integer>>> projectJobsFrames;
@@ -44,7 +49,10 @@ public class DRenderDriver extends AbstractVerticle {
     private Logger logger = LoggerFactory.getLogger(DRenderDriver.class);
 
     public DRenderDriver(){
+        projectMap = new HashMap<>();
+        jobMap = new HashMap<>();
         projectJobs = new HashMap<>();
+        instanceJobs = new HashMap<>();
         projectTimers = new HashMap<>();
         projectJobsFrames = new HashMap<>();
     }
@@ -61,6 +69,8 @@ public class DRenderDriver extends AbstractVerticle {
 
         // setup listeners for dRender Driver
         EventBus eventBus = vertx.eventBus();
+
+        // Consumer for Project related messages
         eventBus.consumer(Channels.DRIVER_PROJECT)
                 .handler(message -> {
                     ProjectRequest projectRequest = Json.decodeValue(message.body().toString(), ProjectRequest.class);
@@ -89,17 +99,31 @@ public class DRenderDriver extends AbstractVerticle {
                         default:
                     }
                 });
+
+        // Consumer for Job related messages
+        eventBus.consumer(Channels.DRIVER_INSTANCE)
+                .handler(message -> {
+                    InstanceHeartbeat instance = Json.decodeValue(message.body().toString(), InstanceHeartbeat.class);
+                    switch (instance.getAction()) {
+                        case START_NEW_MACHINE:
+                            //handleNewMachineStart(instance);
+                            break;
+                        case RESTART_MACHINE:
+                        case KILL_MACHINE:
+                        default:
+                    }
+                });
     }
 
     /**
      * Function to drive the entire process of starting a new project and scheduling new tasks.
      * 1. Initialize project parameters
-     * 2. Prepare jobs based on the total number of frames to render
-     * 3. Spawn machines based on number of jobs
+     * 2. Prepare jobMap based on the total number of frames to render
+     * 3. Spawn machines based on number of jobMap
      * 4. Create output directory in object storage (Example - S3)
-     * 5. Update jobs with the newly retrieved IPs
+     * 5. Update jobMap with the newly retrieved IPs
      * 6. Schedule Heartbeat tasks for each of the machines (Jobs)
-     * 7. Start jobs in each machine
+     * 7. Start jobMap in each machine
      * 8. Return response with all the current information
      * @param projectRequest
      * @return
@@ -108,14 +132,11 @@ public class DRenderDriver extends AbstractVerticle {
         logger.info("Received new request: " + Json.encode(projectRequest));
 
         Project project = initProjectParameters(projectRequest);
-        projects.put(project.getID(), project);
+        projectMap.put(project.getID(), project);
 
-        String cloudAMI = ImageFactory.getImageAMI(project.getSoftware());
-        prepareJobs(project);
+        String cloudAMI = ImageFactory.getJobImageAMI(project.getSoftware());
 
-        List<Job> jobList = new ArrayList<>(projectJobs.get(project.getID()).values());
-
-        Future<List<DRenderInstance>> instancesFuture = spawnMachines(cloudAMI, jobList);
+        Future<List<DRenderInstance>> instancesFuture = spawnMachines(cloudAMI, projectJobs.get(project.getID()).size());
         Future<S3Source> outputURIFuture = getOutputSource(project);
         Future<ProjectResponse> projectResponseFuture = Future.future();
 
@@ -126,26 +147,28 @@ public class DRenderDriver extends AbstractVerticle {
                         S3Source outputURI = outputURIFuture.result();
                         project.setOutputURI(outputURI);
                         // Updates each job with newly retrieved IPs and outputURI
-                        updateJobs(project, instances, outputURI);
+                        List<String> jobIDs = projectJobs.get(project.getID());
+                        int instanceIdx = 0;
+                        for (String jobID : jobIDs) {
+                            updateJob(jobMap.get(jobID), instances.get(instanceIdx), outputURI);
+                            instanceIdx++;
+                        }
 
-                        // Schedule heartbeat checks for the newly created jobs
-                            /*for (Job job : projectJobs.get(project).values()) {
-                                job.setAction(JobAction.HEARTBEAT_CHECK);
-                                long timerID = scheduleHeartbeat(job);
-                                // update timer map
-                                projectTimers.get(project).put(job.getID(), timerID);
-                            }*/
+                        // Schedule heartbeat checks for the newly created jobMap
+                        /*for (DRenderInstance instance : instanceJobs.keySet()) {
+                            scheduleHeartbeat(project.getID(), instance);
+                        }*/
 
-                                            // Start jobs
-//                            for (Job job : projectJobs.get(project).values()) {
-//                                job.setAction(JobAction.START_JOB);
-//                                startJob(job);
-//                            }
+                        // Start jobMap
+//                        for (Job job : projectJobs.get(project.getID()).values()) {
+//                            job.setAction(JobAction.START_JOB);
+//                            startJob(job);
+//                        }
 
                         projectResponseFuture.complete(buildStatus(project));
 
                     } else {
-                        logger.error("Could not create instances or output bucket");
+                        logger.error("Could not create instances or output bucket: " + ar.cause());
                         projectResponseFuture.fail(new Exception());
                     }
                 });
@@ -154,7 +177,7 @@ public class DRenderDriver extends AbstractVerticle {
     }
 
     /**
-     * Initializes project, generates jobs and updates the project->job map
+     * Initializes project, generates jobMap and updates the project->job map
      * @param projectRequest
      * @return
      */
@@ -169,55 +192,53 @@ public class DRenderDriver extends AbstractVerticle {
                             .build();
 
         // update project map
-        Map<String, Job> jobMap = prepareJobs(project);
-        projectJobs.put(project.getID(), jobMap);
+        List<Job> newJobs = prepareJobs(project);
+        newJobs.forEach(job -> jobMap.put(job.getID(), job));
+        projectJobs.put(project.getID(), newJobs.stream().map(Job::getID).collect(Collectors.toList()));
 
         return project;
     }
 
     /**
      * Constructs log object for this project. This is used to construct
-     * current status of the jobs in the project.
+     * current status of the jobMap in the project.
      * @param project
      * @return
      */
     private JsonObject constructLog(Project project) {
         JsonObject log = new JsonObject();
-        List<JsonObject> jobs = new ArrayList<>();
+        JsonArray jobLogs = new JsonArray();
 
-        for (Job job : projectJobs.get(project.getID()).values()) {
-            jobs.add(
+        for (String jobID : projectJobs.getOrDefault(project.getID(), new ArrayList<>())) {
+            Job job = jobMap.get(jobID);
+            jobLogs.add(
                 new JsonObject()
                 .put("id", job.getID())
                 .put("startFrame", job.getStartFrame())
                 .put("endFrame", job.getEndFrame())
-                .put("instanceInfo", job.getInstance())
-                .put("framesRendered", projectJobsFrames.get(project.getID()).get(job.getID()).size())
+                .put("instanceInfo", JsonObject.mapFrom(job.getInstance()))
+                .put("isActive", job.isActive())
+                .put("framesRendered", projectJobsFrames.getOrDefault(project.getID(), new HashMap<>())
+                                                        .getOrDefault(job.getID(), new HashSet<>()).size())
             );
         }
-        log.put("jobs", jobs);
+        log.put("jobs", jobLogs);
         return log;
     }
 
-    private int getMachineCount(Project project) {
-        return projectJobs.get(project.getID()).keySet().size();
-    }
-
     /**
-     * Assigns jobs to instances, and also updates S3 output path
-     * @param project
-     * @param instances
+     * Assigns job to instances, and also updates S3 output path
+     * Also updates the instance -> job mapping
+     * @param job
+     * @param instance
      * @param outputURI
      */
-    private void updateJobs(Project project, List<DRenderInstance> instances, S3Source outputURI) {
-        Map<String, Job> jobMap = projectJobs.get(project.getID());
+    private void updateJob(Job job, DRenderInstance instance, S3Source outputURI) {
+        job.setInstance(instance);
+        job.setOutputURI(outputURI);
 
-        int instanceIdx = 0;
-
-        for (Job job : jobMap.values()) {
-            job.setInstance(instances.get(instanceIdx));
-            job.setOutputURI(outputURI);
-        }
+        instanceJobs.merge(instance, Collections.singletonList(job.getID()),
+                (list1, list2) -> Stream.of(list1, list2).flatMap(Collection::stream).collect(Collectors.toList()));
     }
 
     /**
@@ -227,9 +248,9 @@ public class DRenderDriver extends AbstractVerticle {
      * @param project
      * @return
      */
-    private Map<String, Job> prepareJobs(Project project) {
+    private List<Job> prepareJobs(Project project) {
         int currentFrame = project.getStartFrame();
-        Map<String, Job> jobMap = new HashMap<>();
+        List<Job> jobs = new ArrayList<>();
 
         while (currentFrame < project.getEndFrame()) {
             int startFrame = currentFrame;
@@ -240,27 +261,27 @@ public class DRenderDriver extends AbstractVerticle {
                         .endFrame(endFrame)
                         .projectID(project.getID())
                         .source(project.getSource())
-                        .action(JobAction.START_NEW_MACHINE)
+                        .action(JobAction.START)
                         .build();
 
-            jobMap.put(job.getID(), job);
+            jobs.add(job);
 
             currentFrame += FRAMES_PER_MACHINE;
         }
-        return jobMap;
+        return jobs;
     }
 
     /**
-     * Asynchronously spawns machines. Number of machines spawned is equal to number of jobs to run.
+     * Asynchronously spawns machines. Number of machines spawned is specified in the method.
      * Communicates with ResourceManager through messages in the event queue.
      * Callback returns the instances to caller once complete.
      * @param cloudAMI
-     * @param jobs
+     * @param count
      * @return
      */
-    private Future<List<DRenderInstance>> spawnMachines(String cloudAMI, List<Job> jobs) {
+    private Future<List<DRenderInstance>> spawnMachines(String cloudAMI, int count) {
         EventBus eventBus = vertx.eventBus();
-        InstanceRequest instanceRequest = new InstanceRequest(cloudAMI, jobs);
+        InstanceRequest instanceRequest = new InstanceRequest(cloudAMI, count);
 
         final Future<List<DRenderInstance>> ips = Future.future();
         final long TIMEOUT = 5 * 60 * 1000; // 5 minutes (in ms)
@@ -301,23 +322,33 @@ public class DRenderDriver extends AbstractVerticle {
     }
 
     /**
-     * Schedules timed heartbeat checks for the given Job.
+     * Schedules timed heartbeat checks for the given DRenderInstance.
      * Does not expect a reply, since if the machine runs okay, nothing needs to be done.
-     * @param job
-     * @return
+     * @param instance
      */
-    private long scheduleHeartbeat(Job job) {
+    private void scheduleHeartbeat(String projectID, DRenderInstance instance) {
         long timerId = vertx.setPeriodic(HEARTBEAT_TIMER, id -> {
             EventBus eventBus = vertx.eventBus();
-            eventBus.send(Channels.HEARTBEAT, Json.encode(job));
+            InstanceHeartbeat instanceHeartbeat = new InstanceHeartbeat(instance, DRenderInstanceAction.HEARTBEAT_CHECK);
+            eventBus.send(Channels.HEARTBEAT, Json.encode(instanceHeartbeat));
         });
 
-        return timerId;
+        projectTimers.merge(projectID,
+                            Collections.singletonMap(instance.getID(), timerId),
+                            (currentMap, newMap) ->
+                                    Stream.of(currentMap, newMap)
+                                    .map(Map::entrySet)
+                                    .flatMap(Collection::stream)
+                                    .collect(Collectors.toMap(
+                                            Map.Entry::getKey,
+                                            Map.Entry::getValue,
+                                            (oldVal, newVal) -> newVal
+                                    )));
     }
 
     /**
      * Asynchronously starts the job in the machine associated with the job.
-     * Sends START_JOB message to JobManager. 
+     * Sends START_JOB message to JobManager.
      * @param job
      */
     private void startJob(Job job) {
@@ -325,6 +356,7 @@ public class DRenderDriver extends AbstractVerticle {
         eventBus.send(Channels.JOB_MANAGER, Json.encode(job),
             ar -> {
                 if (ar.succeeded()) {
+                    job.setActive(true);
                     logger.info("Started Job: " + ar.result().body());
                 } else {
                     logger.error("Could not start Job: " + ar.cause());
@@ -341,16 +373,83 @@ public class DRenderDriver extends AbstractVerticle {
                         .endFrame(project.getEndFrame())
                         .software(project.getSoftware())
                         .outputURI(project.getOutputURI())
+                        //.isComplete(checkProjectComple)
                         .log(constructLog(project)).build();
     }
 
     /**
      * Returns current status of the project.
-     * Includes logs of the jobs running currently, and their statuses
+     * Includes logs of the jobMap running currently, and their statuses
      * @param projectID
      * @return
      */
     private ProjectResponse getStatus(String projectID) {
-        return buildStatus(projects.get(projectID));
+        return projectMap.containsKey(projectID) ? buildStatus(projectMap.get(projectID)) : new ProjectResponse();
     }
+
+    /**
+     * Starts a new machine for this job
+     * 1. Determines the number of frames to allocate for this job (some frames might already be rendered).
+     *    - Might have to split into multiple jobMap if frames are not contiguous (will send it to the same machine).
+     * 2. Updates internal data structures to reflect the new jobMap
+     * 3. Since the current job (and hence, its instance) is no longer valid, the associated heartbeat
+     *    checks are also disabled.
+     * @param instanceHeartbeat
+     */
+    /*private void handleNewMachineStart(InstanceHeartbeat instanceHeartbeat) {
+        // deactivate old job
+        instanceJobs.getOrDefault(instanceHeartbeat.getInstance(), new ArrayList<>())
+                .forEach(jobID -> );
+
+        projectJobs.get(job.getProjectID()).get(job.getID()).setActive(false);
+
+        List<Job> newJobs = prepareNewJobs(job);
+        String software = projectMap.get(job.getProjectID()).getSoftware();
+        spawnMachines(ImageFactory.getJobImageAMI(software), 1)
+                .setHandler(ar -> {
+                   if (ar.succeeded()) {
+
+                   }
+                });
+    }
+
+    private List<Job> prepareNewJobs(Job job) {
+        int startFrame = job.getStartFrame();
+        int endFrame = job.getEndFrame();
+        List<Integer> frames = projectJobsFrames.get(job.getProjectID()).get(job.getID())
+                                            .stream()
+                                            .sorted().collect(Collectors.toList());
+
+        List<Job> newJobs = new ArrayList<>();
+
+        int prevFrame = startFrame-1;
+        for (int i = 1; i < frames.size(); i++) {
+            if (frames.get(i) != prevFrame+1) {
+                newJobs.add(
+                  Job.builder()
+                  .startFrame(prevFrame+1)
+                  .endFrame(frames.get(i)-1)
+                  .source(job.getSource())
+                  .action(JobAction.START)
+                  .messageQ(job.getMessageQ())
+                  .projectID(job.getProjectID())
+                  .outputURI(job.getOutputURI()).build()
+                );
+            }
+            prevFrame = frames.get(i);
+        }
+
+        if (prevFrame != endFrame) {
+            newJobs.add(Job.builder()
+                    .startFrame(prevFrame+1)
+                    .endFrame(endFrame)
+                    .source(job.getSource())
+                    .action(JobAction.START)
+                    .messageQ(job.getMessageQ())
+                    .projectID(job.getProjectID())
+                    .outputURI(job.getOutputURI()).build());
+        }
+
+        return newJobs;
+    }*/
 }

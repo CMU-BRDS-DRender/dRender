@@ -2,7 +2,7 @@ package com.drender.cloud;
 
 public class ImageFactory {
 
-    public static String getImageAMI(String software) {
+    public static String getJobImageAMI(String software) {
         switch (software) {
             case "blender":
             default:

@@ -15,20 +15,19 @@ public class AWSRequestProperty extends RequestProperty{
     public String sshKeyName;
     public String securityGroup;
     public String region;
-    public List<String> nameList;
+    public int count;
 
 
-    public AWSRequestProperty(String sshKeyName, String securityGroup , List<String> nameList, String region, String imageId) {
+    public AWSRequestProperty(String sshKeyName, String securityGroup , int count, String region, String imageId) {
         this.region =  region;
-        this.nameList = nameList;
+        this.count = count;
         this.machineImageId = imageId;
         this.sshKeyName = sshKeyName;
         this.securityGroup = securityGroup;
     }
 
-    public AWSRequestProperty(String sshKeyName, String securityGroup , String name, String region, String imageId) {
+    public AWSRequestProperty(String sshKeyName, String securityGroup, String region, String imageId) {
         this.region =  region;
-        this.name = name;
         this.machineImageId = imageId;
         this.sshKeyName = sshKeyName;
         this.securityGroup = securityGroup;

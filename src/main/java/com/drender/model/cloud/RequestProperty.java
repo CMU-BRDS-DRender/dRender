@@ -8,6 +8,6 @@ import lombok.*;
 @Getter
 @Setter
 public class RequestProperty {
-    protected String name;
+    protected String name; // may remove this field
     protected String region;
 }

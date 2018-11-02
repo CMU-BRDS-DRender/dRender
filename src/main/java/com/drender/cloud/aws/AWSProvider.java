@@ -44,7 +44,7 @@ public class AWSProvider implements MachineProvider<AWSRequestProperty>{
         ec2Provisioner = new EC2Provisioner(property.getRegion(), credentialProvider);
         try {
             List<DRenderInstance> instances =
-                    ec2Provisioner.spawnInstances(property.getNameList(),
+                    ec2Provisioner.spawnInstances(property.getCount(),
                             property.getSecurityGroup(),
                             property.getSshKeyName(),
                             property.getMachineImageId());

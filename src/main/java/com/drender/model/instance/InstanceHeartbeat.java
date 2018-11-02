@@ -5,16 +5,11 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
-import java.util.List;
-
-/**
- * Machine request object to request one or more machines
- */
 @Getter
 @Setter
 @AllArgsConstructor
 @NoArgsConstructor
-public class InstanceRequest {
-    private String cloudAMI;
-    private int count;
+public class InstanceHeartbeat {
+    private DRenderInstance instance;
+    private DRenderInstanceAction action;
 }
