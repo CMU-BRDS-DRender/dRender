@@ -42,7 +42,7 @@ public class S3BucketProvisioner implements StorageProvider {
     }
 
     @Override
-    public S3Source createStorage(String projectID) {
+    public S3Source createStorage(String folderName) {
         AmazonS3 s3Client = AmazonS3ClientBuilder.standard().withCredentials(credentialsProvider).build();
 
         // Create folder with this projectID
@@ -53,11 +53,11 @@ public class S3BucketProvisioner implements StorageProvider {
         // create empty content
         InputStream emptyContent = new ByteArrayInputStream(new byte[0]);
 
-        String fileName = projectID + SUFFIX;
+        String fileName = folderName + SUFFIX;
 
         // create a PutObjectRequest passing the folder name suffixed by /
         PutObjectRequest putObjectRequest = new PutObjectRequest(S3BucketProvisioner.DEFAULT_BUCKET_NAME,
-                projectID + SUFFIX, emptyContent, metadata);
+                folderName + SUFFIX, emptyContent, metadata);
 
         s3Client.putObject(putObjectRequest);
 

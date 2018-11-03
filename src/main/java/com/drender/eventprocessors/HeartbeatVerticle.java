@@ -22,6 +22,8 @@ public class HeartbeatVerticle extends AbstractVerticle {
 
     @Override
     public void start() throws Exception {
+        logger.info("Starting...");
+
         httpUtils = new HttpUtils(vertx);
 
         EventBus eventBus = vertx.eventBus();

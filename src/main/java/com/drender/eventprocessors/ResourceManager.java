@@ -28,17 +28,22 @@ public class ResourceManager extends AbstractVerticle {
     private MachineProvider<AWSRequestProperty> machineProvider = new AWSProvider();
     private StorageProvider storageProvider = new S3BucketProvisioner();
 
+    private final String SUFFIX = "/";
+    private final String OUTPUT_FOLDER = "output";
+
     private Logger logger = LoggerFactory.getLogger(ResourceManager.class);
 
     @Override
     public void start() throws Exception {
+        logger.info("Starting...");
+
         EventBus eventBus = vertx.eventBus();
         eventBus.consumer(Channels.INSTANCE_MANAGER)
                 .handler(message ->
                         vertx.executeBlocking(future -> {
                             InstanceRequest instanceRequest = Json.decodeValue(message.body().toString(), InstanceRequest.class);
 
-                            logger.info("Received new instance request " + message.body().toString());
+                            logger.info("Received new instance request: " + message.body().toString());
 
                             List<DRenderInstance> instances = getNewInstances(instanceRequest.getCloudAMI(), instanceRequest.getCount());
 
@@ -56,9 +61,10 @@ public class ResourceManager extends AbstractVerticle {
                 .handler(message -> {
                     String projectID = message.body().toString();
 
-                    logger.info("Received new storage request " +  projectID);
+                    logger.info("Received new storage request for project with ID: " +  projectID);
 
-                    S3Source response = storageProvider.createStorage(projectID);
+                    String folderName = projectID + SUFFIX + OUTPUT_FOLDER;
+                    S3Source response = storageProvider.createStorage(folderName);
                     message.reply(Json.encode(response));
                 });
     }
