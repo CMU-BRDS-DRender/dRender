@@ -4,11 +4,14 @@ import io.vertx.core.Future;
 import io.vertx.core.Vertx;
 import io.vertx.core.buffer.Buffer;
 import io.vertx.core.json.Json;
+import io.vertx.core.logging.Logger;
+import io.vertx.core.logging.LoggerFactory;
 import io.vertx.ext.web.client.HttpResponse;
 import io.vertx.ext.web.client.WebClient;
 public class HttpUtils {
 
     private WebClient client;
+    private Logger logger = LoggerFactory.getLogger(HttpUtils.class);
 
     public HttpUtils(Vertx vertx) {
         this.client = WebClient.create(vertx);
@@ -17,6 +20,8 @@ public class HttpUtils {
     public <R> Future<R> get(String domain, String uri, int port, Class<R> clazz) {
         final Future<R> future = Future.future();
 
+        logger.info("GET Request: " + domain + ":" + port + uri);
+
         client
             .get(port, domain, uri)
             .putHeader("content-type", "application/json")
@@ -24,6 +29,7 @@ public class HttpUtils {
                 if (ar.succeeded()) {
                     HttpResponse<Buffer> response = ar.result();
                     R responseObject = Json.decodeValue(response.body(), clazz);
+                    logger.info("Received response: " + response.bodyAsString());
 
                     future.complete(responseObject);
                 } else {

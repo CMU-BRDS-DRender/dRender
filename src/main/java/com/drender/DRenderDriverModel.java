@@ -9,9 +9,7 @@ import java.util.*;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-import static java.util.stream.Collectors.groupingBy;
-import static java.util.stream.Collectors.mapping;
-import static java.util.stream.Collectors.toSet;
+import static java.util.stream.Collectors.*;
 
 /**
  * Stores the state of DRenderDriver.
@@ -26,7 +24,7 @@ public class DRenderDriverModel {
     // Stores projectID -> [jobID] mapping
     private Map<String, List<String>> projectJobs;
     // Stores instanceID -> [jobIDs] mapping
-    private Map<DRenderInstance, Set<String>> instanceJobs;
+    private Map<DRenderInstance, List<String>> instanceJobs;
     // Stores instanceID -> heartbeatTimerID mapping
     private Map<String, Long> instanceTimers;
     // Stores jobID -> [frameSet] mapping
@@ -41,6 +39,28 @@ public class DRenderDriverModel {
         jobFrames = new HashMap<>();
     }
 
+    /**
+     * Checks if project is complete.
+     * Calculates the total frames to be rendered, and then checks if all
+     * the frames are rendered or not.
+     * @param projectID
+     * @return
+     */
+    public boolean isProjectComplete(String projectID) {
+        Project project = projectMap.get(projectID);
+        int totalFrames = project.getEndFrame() - project.getStartFrame() + 1;
+        int[] frames = new int[totalFrames];
+
+        projectJobs.get(projectID)
+                .forEach(jobId -> {
+                    jobFrames.getOrDefault(jobId, new HashSet<>())
+                            .forEach(f -> frames[f-1] = -1);
+                });
+
+        return Arrays.stream(frames)
+                .allMatch(f ->  f == -1);
+    }
+
     public void addNewProject(Project project) {
         projectMap.put(project.getID(), project);
     }
@@ -49,6 +69,13 @@ public class DRenderDriverModel {
         return projectJobs.getOrDefault(projectID, new ArrayList<>())
                 .stream()
                 .map(id -> jobMap.get(id))
+                .collect(Collectors.toList());
+    }
+
+    public List<Job> getAllJobs(DRenderInstance instance) {
+        return instanceJobs.getOrDefault(instance, new ArrayList<>())
+                .stream()
+                .map(jobID -> jobMap.get(jobID))
                 .collect(Collectors.toList());
     }
 
@@ -64,6 +91,15 @@ public class DRenderDriverModel {
                 .stream()
                 .map(id -> jobMap.get(id))
                 .filter(Job::isActive)
+                .collect(Collectors.toList());
+    }
+
+    public List<String> getActiveJobIds(String projectID) {
+        return projectJobs.getOrDefault(projectID, new ArrayList<>())
+                .stream()
+                .map(id -> jobMap.get(id))
+                .filter(Job::isActive)
+                .map(Job::getID)
                 .collect(Collectors.toList());
     }
 
@@ -91,16 +127,20 @@ public class DRenderDriverModel {
     }
 
     public void updateInstances(List<Job> jobs) {
-        Map<DRenderInstance, Set<String>> instanceJobIds =
+        Map<DRenderInstance, List<String>> instanceJobIds =
                 jobs.stream()
                     .filter(job -> job.getInstance() != null)
-                    .collect(groupingBy(Job::getInstance, mapping(Job::getID, toSet())));
+                    .collect(groupingBy(Job::getInstance, mapping(Job::getID, toList())));
 
         // merge these new jobs with existing instance information
         instanceJobIds.forEach((key, value) -> instanceJobs.merge(key, value,
-                (oldSet, newSet) -> Stream.of(oldSet, newSet)
+                (oldList, newList) -> Stream.of(oldList, newList)
                                         .flatMap(Collection::stream)
-                                        .collect(Collectors.toSet())));
+                                        .collect(Collectors.toList())));
+    }
+
+    public Set<Integer> getRenderedFramesForJob(String jobID) {
+        return jobFrames.getOrDefault(jobID, new HashSet<>());
     }
 
     public int getFrameRenderedCount(String jobID) {
@@ -117,6 +157,11 @@ public class DRenderDriverModel {
         return jobMap.get(jobID);
     }
 
+    public Job updateJobActiveState(String jobID, boolean isActive) {
+        jobMap.get(jobID).setActive(isActive);
+        return jobMap.get(jobID);
+    }
+
     public long getInstanceHeartbeatTimer(String instanceID) {
         return instanceTimers.get(instanceID);
     }
@@ -128,5 +173,10 @@ public class DRenderDriverModel {
 
     public Project getProject(String projectID) {
         return projectMap.get(projectID);
+    }
+
+    public void removeInstance(DRenderInstance instance) {
+        instanceJobs.remove(instance);
+        instanceTimers.remove(instance.getID());
     }
 }

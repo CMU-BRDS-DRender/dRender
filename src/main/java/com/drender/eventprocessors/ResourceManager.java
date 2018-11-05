@@ -71,7 +71,7 @@ public class ResourceManager extends AbstractVerticle {
 
     private List<DRenderInstance> getNewInstances(String cloudAMI, int count) {
         String region = "us-east-1a";
-        String securityGroupName = "default";
+        String securityGroupName = "HTTP Open";
         String sshKeyName = "drender";
         AWSRequestProperty awsRequestProperty = new AWSRequestProperty(sshKeyName, securityGroupName, count, region, cloudAMI);
         return machineProvider.startMachines(awsRequestProperty);

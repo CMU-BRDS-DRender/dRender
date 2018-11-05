@@ -31,7 +31,7 @@ public class HeartbeatVerticle extends AbstractVerticle {
                 .handler(message -> {
                     InstanceHeartbeat instanceHeartbeat = Json.decodeValue(message.body().toString(), InstanceHeartbeat.class);
 
-                    httpUtils.get(instanceHeartbeat.getInstance().getIp(), "/statusCheck", 8080, JobResponse.class)
+                    httpUtils.get(instanceHeartbeat.getInstance().getIp(), "/nodeStatus", 8080, JobResponse.class)
                             .setHandler(ar -> {
                                 if (!ar.succeeded()) {
                                     DRenderInstanceAction nextAction = DRenderInstanceAction.START_NEW_MACHINE;

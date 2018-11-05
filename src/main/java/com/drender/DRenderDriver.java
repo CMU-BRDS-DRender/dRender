@@ -139,11 +139,11 @@ public class DRenderDriver extends AbstractVerticle {
                         }
 
                         // Schedule heartbeat checks for the newly created jobMap
-                        /*for (DRenderInstance instance : instanceJobs.keySet()) {
-                            scheduleHeartbeat(project.getID(), instance);
-                        }*/
+                        for (DRenderInstance instance : instances) {
+                            scheduleHeartbeat(instance);
+                        }
 
-                        // Start jobMap
+                        // Start jobs
 //                        for (Job job : projectJobs.get(project.getID()).values()) {
 //                            job.setAction(JobAction.START_JOB);
 //                            startJob(job);
@@ -304,6 +304,19 @@ public class DRenderDriver extends AbstractVerticle {
     }
 
     /**
+     * Removes scheduled heartbeat check for this instance
+     * @param instance
+     */
+    private void removeHeartbeat(DRenderInstance instance) {
+        long timerId = dRenderDriverModel.getInstanceHeartbeatTimer(instance.getID());
+        if (vertx.cancelTimer(timerId)) {
+            logger.info("Unregistered timer for instance: " + instance);
+        } else {
+            logger.info("Could not unregister. Timer does not exist for instance: " + instance);
+        }
+    }
+
+    /**
      * Asynchronously starts the job in the machine associated with the job.
      * Sends START_JOB message to JobManager.
      * @param job
@@ -330,7 +343,7 @@ public class DRenderDriver extends AbstractVerticle {
                         .endFrame(project.getEndFrame())
                         .software(project.getSoftware())
                         .outputURI(project.getOutputURI())
-                        //.isComplete(checkProjectComple)
+                        .isComplete(dRenderDriverModel.isProjectComplete(project.getID()))
                         .log(constructLog(project)).build();
     }
 
@@ -342,7 +355,7 @@ public class DRenderDriver extends AbstractVerticle {
      */
     private ProjectResponse getStatus(String projectID) {
         Project project = dRenderDriverModel.getProject(projectID);
-        return project == null ? buildStatus(project) : new ProjectResponse();
+        return project != null ? buildStatus(project) : new ProjectResponse();
     }
 
     /**
@@ -354,27 +367,43 @@ public class DRenderDriver extends AbstractVerticle {
      *    checks are also disabled.
      * @param instanceHeartbeat
      */
-    /*private void handleNewMachineStart(InstanceHeartbeat instanceHeartbeat) {
-        // deactivate old job
-        instanceJobs.getOrDefault(instanceHeartbeat.getInstance(), new ArrayList<>())
-                .forEach(jobID -> );
+    private void handleNewMachineStart(InstanceHeartbeat instanceHeartbeat) {
+        List<Job> instanceJobs = dRenderDriverModel.getAllJobs(instanceHeartbeat.getInstance());
 
-        projectJobs.get(job.getProjectID()).get(job.getID()).setActive(false);
+        // deactivate old jobs
+        instanceJobs.forEach(job -> dRenderDriverModel.updateJobActiveState(job.getID(), false));
 
-        List<Job> newJobs = prepareNewJobs(job);
-        String software = projectMap.get(job.getProjectID()).getSoftware();
-        spawnMachines(ImageFactory.getJobImageAMI(software), 1)
-                .setHandler(ar -> {
-                   if (ar.succeeded()) {
+        List<Job> newJobs = instanceJobs.stream()
+                                .map(this::prepareNewJobs)
+                                .flatMap(Collection::stream)
+                                .collect(Collectors.toList());
 
-                   }
-                });
+        if (newJobs.size() > 0) {
+            String projectID = newJobs.get(0).getProjectID();
+            String software = dRenderDriverModel.getProject(projectID).getSoftware();
+            spawnMachines(ImageFactory.getJobImageAMI(software), 1)
+                    .setHandler(ar -> {
+                        if (ar.succeeded()) {
+                            DRenderInstance instance = ar.result().get(0);
+                            // Assign newly created jobs
+                            // Schedule heartbeat
+                            newJobs.forEach(job -> job.setInstance(instance));
+                            dRenderDriverModel.addNewJobs(newJobs, projectID);
+
+                            scheduleHeartbeat(instance);
+                        }
+                    });
+        }
+
+        // Remove timer for old instance
+        removeHeartbeat(instanceHeartbeat.getInstance());
+        dRenderDriverModel.removeInstance(instanceHeartbeat.getInstance());
     }
 
     private List<Job> prepareNewJobs(Job job) {
         int startFrame = job.getStartFrame();
         int endFrame = job.getEndFrame();
-        List<Integer> frames = projectJobsFrames.get(job.getProjectID()).get(job.getID())
+        List<Integer> frames = dRenderDriverModel.getRenderedFramesForJob(job.getID())
                                             .stream()
                                             .sorted().collect(Collectors.toList());
 
@@ -409,5 +438,5 @@ public class DRenderDriver extends AbstractVerticle {
         }
 
         return newJobs;
-    }*/
+    }
 }
