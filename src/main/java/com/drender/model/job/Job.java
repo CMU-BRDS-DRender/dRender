@@ -24,12 +24,12 @@ public class Job {
     private int endFrame;
     private JobAction action;
     private S3Source outputURI;
-    private String messageQ;
+    private MessageQ messageQ;
     private boolean isActive;
 
     @Builder
     public Job(DRenderInstance instance, String projectID, S3Source source, int startFrame, int endFrame,
-               JobAction action, S3Source outputURI, String messageQ) {
+               JobAction action, S3Source outputURI, MessageQ messageQ) {
         this.ID = UUID.randomUUID().toString();
         this.projectID = projectID;
         this.source = source;

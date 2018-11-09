@@ -179,4 +179,11 @@ public class DRenderDriverModel {
         instanceJobs.remove(instance);
         instanceTimers.remove(instance.getID());
     }
+
+    public void updateJobFrames(String jobID, int frame) {
+        jobFrames.merge(jobID, Collections.singleton(frame),
+                (oldSet, newSet) -> Stream.of(oldSet, newSet)
+                                        .flatMap(Collection::stream)
+                                        .collect(Collectors.toSet()));
+    }
 }

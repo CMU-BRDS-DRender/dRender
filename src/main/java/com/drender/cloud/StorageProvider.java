@@ -5,4 +5,5 @@ import com.drender.model.cloud.S3Source;
 public interface StorageProvider {
 
     S3Source createStorage(String projectID);
+    boolean checkExists(S3Source source);
 }

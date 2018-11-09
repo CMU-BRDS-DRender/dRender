@@ -1,14 +1,16 @@
 package com.drender;
 
 import com.drender.cloud.ImageFactory;
-import com.drender.eventprocessors.DRenderLogger;
 import com.drender.eventprocessors.HeartbeatVerticle;
+import com.drender.eventprocessors.JobManager;
 import com.drender.eventprocessors.ResourceManager;
 import com.drender.model.*;
 import com.drender.model.cloud.S3Source;
 import com.drender.model.instance.*;
 import com.drender.model.job.Job;
 import com.drender.model.job.JobAction;
+import com.drender.model.job.JobFrame;
+import com.drender.model.job.MessageQ;
 import com.drender.model.project.Project;
 import com.drender.model.project.ProjectRequest;
 import com.drender.model.project.ProjectResponse;
@@ -23,15 +25,17 @@ import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import io.vertx.core.logging.Logger;
 import io.vertx.core.logging.LoggerFactory;
+import io.vertx.rabbitmq.RabbitMQClient;
+import io.vertx.rabbitmq.RabbitMQOptions;
 
 import java.util.*;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 public class DRenderDriver extends AbstractVerticle {
 
     private final int FRAMES_PER_MACHINE = 20;
     private final int HEARTBEAT_TIMER = 15 * 1000; // 15 seconds
+    public static MessageQ MESSAGE_Q;
 
     private DRenderDriverModel dRenderDriverModel;
 
@@ -47,9 +51,9 @@ public class DRenderDriver extends AbstractVerticle {
         logger.info("Starting...");
 
         // Deploy all the verticles
-        vertx.deployVerticle(new DRenderLogger());
         vertx.deployVerticle(new HeartbeatVerticle());
         vertx.deployVerticle(new ResourceManager(), new DeploymentOptions().setMaxWorkerExecuteTime(5* 60L * 1000 * 1000000));
+        vertx.deployVerticle(new JobManager());
 
         // setup listeners for dRender Driver
         EventBus eventBus = vertx.eventBus();
@@ -58,6 +62,8 @@ public class DRenderDriver extends AbstractVerticle {
         eventBus.consumer(Channels.DRIVER_PROJECT)
                 .handler(message -> {
                     ProjectRequest projectRequest = Json.decodeValue(message.body().toString(), ProjectRequest.class);
+                    DRenderDriver.MESSAGE_Q = new MessageQ(projectRequest.getPublicIP(), "drender.driver.frames");
+
                     switch (projectRequest.getAction()) {
                         /*
                          * START is run in worker (executor) threads by vertx as a blocking operation.
@@ -84,7 +90,7 @@ public class DRenderDriver extends AbstractVerticle {
                     }
                 });
 
-        // Consumer for Job related messages
+        // Consumer for Instance related messages
         eventBus.consumer(Channels.DRIVER_INSTANCE)
                 .handler(message -> {
                     InstanceHeartbeat instance = Json.decodeValue(message.body().toString(), InstanceHeartbeat.class);
@@ -97,6 +103,30 @@ public class DRenderDriver extends AbstractVerticle {
                         default:
                     }
                 });
+
+        // Consumer for JobFrame related messages
+        eventBus.consumer(Channels.DRIVER_FRAMES)
+                .handler(message -> {
+                    JobFrame frame = Json.decodeValue(message.body().toString(), JobFrame.class);
+                    handleFrameRenderedMessage(frame);
+                });
+    }
+
+    private void setupRabbitMQConsumer() {
+        // Setup RabbitMQ consumer
+        RabbitMQOptions config = new RabbitMQOptions();
+        config.setHost(DRenderDriver.MESSAGE_Q.getHost());
+        config.setPort(5672);
+
+        RabbitMQClient client = RabbitMQClient.create(vertx, config);
+        client.basicConsume(DRenderDriver.MESSAGE_Q.getQueue(), Channels.DRIVER_FRAMES, false, consumeResult -> {
+            if (consumeResult.succeeded()) {
+                logger.info("RabbitMQ consumer created!");
+            } else {
+                logger.error("Could not create consumer");
+                consumeResult.cause().printStackTrace();
+            }
+        });
     }
 
     /**
@@ -116,6 +146,7 @@ public class DRenderDriver extends AbstractVerticle {
         logger.info("Received new request: " + Json.encode(projectRequest));
 
         Project project = initProjectParameters(projectRequest);
+        setupRabbitMQConsumer();
 
         String cloudAMI = ImageFactory.getJobImageAMI(project.getSoftware());
 
@@ -233,7 +264,7 @@ public class DRenderDriver extends AbstractVerticle {
 
             jobs.add(job);
 
-            currentFrame += endFrame + 1;
+            currentFrame = endFrame + 1;
         }
         return jobs;
     }
@@ -277,7 +308,7 @@ public class DRenderDriver extends AbstractVerticle {
 
         final Future<S3Source> future = Future.future();
 
-        eventBus.send(Channels.STORAGE_MANAGER, project.getID(),
+        eventBus.send(Channels.NEW_STORAGE, project.getID(),
             ar -> {
                 if (ar.succeeded()) {
                     future.complete(Json.decodeValue(ar.result().body().toString(), S3Source.class));
@@ -285,6 +316,21 @@ public class DRenderDriver extends AbstractVerticle {
             }
         );
 
+        return future;
+    }
+
+    private Future<Boolean> checkSource(S3Source source) {
+        EventBus eventBus = vertx.eventBus();
+        final Future<Boolean> future = Future.future();
+
+        eventBus.send(Channels.CHECK_STORAGE, source,
+            ar -> {
+                if (ar.succeeded()) {
+                    JsonObject response = Json.decodeValue(ar.result().body().toString(), JsonObject.class);
+                    future.complete(response.getBoolean("exists"));
+                }
+            }
+        );
         return future;
     }
 
@@ -438,5 +484,21 @@ public class DRenderDriver extends AbstractVerticle {
         }
 
         return newJobs;
+    }
+
+    private void handleFrameRenderedMessage(JobFrame jobFrame) {
+        checkSource(jobFrame.getSource())
+                .setHandler(ar -> {
+                    if (ar.succeeded()) {
+                        boolean exists = ar.result();
+                        if (exists) {
+                            dRenderDriverModel.updateJobFrames(jobFrame.getJobID(), jobFrame.getFrame());
+                        } else {
+                            logger.error("Frame does not exist: " + jobFrame);
+                        }
+                    } else {
+                        logger.error("Could not handle frame render message:" + jobFrame);
+                    }
+                });
     }
 }

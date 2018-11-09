@@ -3,13 +3,12 @@ package com.drender.eventprocessors;
 import com.drender.cloud.StorageProvider;
 import com.drender.cloud.aws.AWSProvider;
 import com.drender.cloud.MachineProvider;
-import com.drender.cloud.aws.S3BucketProvisioner;
+import com.drender.cloud.aws.S3BucketManager;
 import com.drender.model.Channels;
 import com.drender.model.cloud.AWSRequestProperty;
 import com.drender.model.cloud.S3Source;
 import com.drender.model.instance.DRenderInstance;
 import com.drender.model.instance.InstanceResponse;
-import com.drender.model.job.Job;
 import com.drender.model.instance.InstanceRequest;
 import io.vertx.core.*;
 import io.vertx.core.eventbus.EventBus;
@@ -18,7 +17,6 @@ import io.vertx.core.logging.Logger;
 import io.vertx.core.logging.LoggerFactory;
 
 import java.util.List;
-import java.util.stream.Collectors;
 
 public class ResourceManager extends AbstractVerticle {
 
@@ -26,7 +24,7 @@ public class ResourceManager extends AbstractVerticle {
         Currently setup for AWS
      */
     private MachineProvider<AWSRequestProperty> machineProvider = new AWSProvider();
-    private StorageProvider storageProvider = new S3BucketProvisioner();
+    private StorageProvider storageProvider = new S3BucketManager();
 
     private final String SUFFIX = "/";
     private final String OUTPUT_FOLDER = "output";
@@ -57,7 +55,7 @@ public class ResourceManager extends AbstractVerticle {
                         })
                 );
 
-        eventBus.consumer(Channels.STORAGE_MANAGER)
+        eventBus.consumer(Channels.NEW_STORAGE)
                 .handler(message -> {
                     String projectID = message.body().toString();
 
@@ -66,6 +64,13 @@ public class ResourceManager extends AbstractVerticle {
                     String folderName = projectID + SUFFIX + OUTPUT_FOLDER;
                     S3Source response = storageProvider.createStorage(folderName);
                     message.reply(Json.encode(response));
+                });
+
+        eventBus.consumer(Channels.CHECK_STORAGE)
+                .handler(message -> {
+                    S3Source source = Json.decodeValue(message.body().toString(), S3Source.class);
+                    boolean exists = storageProvider.checkExists(source);
+                    message.reply(exists);
                 });
     }
 

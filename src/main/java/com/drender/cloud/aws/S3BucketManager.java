@@ -13,14 +13,14 @@ import com.drender.model.cloud.S3Source;
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
 
-public class S3BucketProvisioner implements StorageProvider {
+public class S3BucketManager implements StorageProvider {
 
     private final static String DEFAULT_BUCKET_NAME = "drender";
     private final String SUFFIX = "/";
 
-    private AWSCredentialsProvider credentialsProvider;
+    private AmazonS3 client;
 
-    public S3BucketProvisioner(){
+    public S3BucketManager(){
         try {
             /*
              * http://docs.aws.amazon.com/AWSJavaSDK/latest/javadoc/com/amazonaws/auth/DefaultAWSCredentialsProviderChain.html
@@ -33,7 +33,8 @@ public class S3BucketProvisioner implements StorageProvider {
              *       environment variable is set and security manager has permission to access the variable
              *   5. Instance profile credentials delivered through the Amazon EC2 metadata service
              */
-            credentialsProvider = new DefaultAWSCredentialsProviderChain();
+            AWSCredentialsProvider credentialsProvider = new DefaultAWSCredentialsProviderChain();
+            client = AmazonS3ClientBuilder.standard().withCredentials(credentialsProvider).build();
         } catch (Exception e) {
             throw new AmazonClientException(
                     "Cannot load the credentials from the credential profiles file.Please make sure that your credentials file is at the correct ",
@@ -43,7 +44,6 @@ public class S3BucketProvisioner implements StorageProvider {
 
     @Override
     public S3Source createStorage(String folderName) {
-        AmazonS3 s3Client = AmazonS3ClientBuilder.standard().withCredentials(credentialsProvider).build();
 
         // Create folder with this projectID
         // create meta-data for your folder and set content-length to 0
@@ -56,11 +56,16 @@ public class S3BucketProvisioner implements StorageProvider {
         String fileName = folderName + SUFFIX;
 
         // create a PutObjectRequest passing the folder name suffixed by /
-        PutObjectRequest putObjectRequest = new PutObjectRequest(S3BucketProvisioner.DEFAULT_BUCKET_NAME,
+        PutObjectRequest putObjectRequest = new PutObjectRequest(S3BucketManager.DEFAULT_BUCKET_NAME,
                 folderName + SUFFIX, emptyContent, metadata);
 
-        s3Client.putObject(putObjectRequest);
+        client.putObject(putObjectRequest);
 
-        return new S3Source(S3BucketProvisioner.DEFAULT_BUCKET_NAME, fileName);
+        return new S3Source(S3BucketManager.DEFAULT_BUCKET_NAME, fileName);
+    }
+
+    @Override
+    public boolean checkExists(S3Source source) {
+        return client.doesObjectExist(source.getBucketName(), source.getFile());
     }
 }

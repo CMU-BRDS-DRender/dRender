@@ -10,11 +10,16 @@
     <dependencyManagement>
         <dependencies>
             <dependency>
+            <groupId>com.amazonaws</groupId>
+            <artifactId>aws-java-sdk-bom</artifactId>
+            <version>1.11.327</version>
+            <type>pom</type>
+            <scope>import</scope>
+            </dependency>
+            <dependency>
                 <groupId>com.amazonaws</groupId>
-                <artifactId>aws-java-sdk-bom</artifactId>
-                <version>1.11.327</version>
-                <type>pom</type>
-                <scope>import</scope>
+                <artifactId>aws-java-sdk-iam</artifactId>
+                <version>1.13.327</version>
             </dependency>
         </dependencies>
     </dependencyManagement>
@@ -47,6 +52,11 @@
         <dependency>
             <groupId>com.amazonaws</groupId>
             <artifactId>aws-java-sdk-ec2</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.vertx</groupId>
+            <artifactId>vertx-rabbitmq-client</artifactId>
+            <version>3.5.4</version>
         </dependency>
     </dependencies>
 

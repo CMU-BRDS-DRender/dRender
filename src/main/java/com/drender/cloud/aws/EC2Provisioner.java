@@ -22,6 +22,9 @@ public class EC2Provisioner {
     private static AmazonEC2 ec2Client = null;
     private Logger logger = LoggerFactory.getLogger(EC2Provisioner.class);
 
+    private final String S3_FULL_ACCESS_ARN = "arn:aws:iam::214187139358:instance-profile/S3FullAccess";
+    private final String ROLE_NAME = "S3FullAccess";
+
     public EC2Provisioner(String region, AWSCredentialsProvider credentialProvider){
         if(ec2Client == null) {
             ec2Client = AmazonEC2ClientBuilder.standard()
@@ -46,7 +49,10 @@ public class EC2Provisioner {
                 .withMinCount(count)
                 .withMaxCount(count)
                 .withKeyName(sshKeyName)
-                .withSecurityGroups(securityGroup);
+                .withSecurityGroups(securityGroup)
+                .withIamInstanceProfile(
+                        new IamInstanceProfileSpecification().withArn(S3_FULL_ACCESS_ARN).withName(ROLE_NAME)
+                );
 
         RunInstancesResult result = ec2Client.runInstances(runInstancesRequest);
 

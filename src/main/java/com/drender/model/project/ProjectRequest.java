@@ -17,5 +17,8 @@ public class ProjectRequest {
     private int startFrame;
     private int endFrame;
 
+    // Master node's IP, to be used for connecting to RabbitMQ. Sort of a hack.
+    private String publicIP;
+
     private ProjectAction action;
 }
