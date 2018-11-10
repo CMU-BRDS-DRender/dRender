@@ -118,7 +118,8 @@ public class DRenderDriver extends AbstractVerticle {
         config.setHost(DRenderDriver.MESSAGE_Q.getHost());
         config.setPort(5672);
         config.setUser("drender");
-        config.setPassword("brds18749");
+        config.setPassword("brds");
+        config.setVirtualHost("/");
 
         RabbitMQClient client = RabbitMQClient.create(vertx, config);
         client.start(ar -> {
