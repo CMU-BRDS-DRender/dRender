@@ -3,7 +3,6 @@ package com.drender.utils;
 import io.vertx.core.Future;
 import io.vertx.core.Vertx;
 import io.vertx.core.buffer.Buffer;
-import io.vertx.core.http.HttpMethod;
 import io.vertx.core.json.Json;
 import io.vertx.core.logging.Logger;
 import io.vertx.core.logging.LoggerFactory;
@@ -48,7 +47,7 @@ public class HttpUtils {
         logger.info("POST Request: " + domain + ":" + port + uri + " Body: " + Json.encode(requestBody));
 
         client
-            .request(HttpMethod.POST, port, domain, uri)
+            .post(port, domain, uri)
             .putHeader("content-type", "application/json")
             .sendJson(requestBody, ar -> {
                 if (ar.succeeded()) {
