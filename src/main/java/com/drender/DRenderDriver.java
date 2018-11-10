@@ -52,7 +52,7 @@ public class DRenderDriver extends AbstractVerticle {
 
         // Deploy all the verticles
         vertx.deployVerticle(new HeartbeatVerticle());
-        vertx.deployVerticle(new ResourceManager(), new DeploymentOptions().setMaxWorkerExecuteTime(5* 60L * 1000 * 1000000));
+        vertx.deployVerticle(new ResourceManager(), new DeploymentOptions().setWorker(true).setMaxWorkerExecuteTime(5* 60L * 1000 * 1000000));
         vertx.deployVerticle(new JobManager());
 
         // setup listeners for dRender Driver
@@ -338,6 +338,8 @@ public class DRenderDriver extends AbstractVerticle {
                 if (ar.succeeded()) {
                     JsonObject response = Json.decodeValue(ar.result().body().toString(), JsonObject.class);
                     future.complete(response.getBoolean("exists"));
+                } else {
+                    future.fail("Could not verify storage: " + ar.cause());
                 }
             }
         );

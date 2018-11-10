@@ -37,23 +37,19 @@ public class ResourceManager extends AbstractVerticle {
 
         EventBus eventBus = vertx.eventBus();
         eventBus.consumer(Channels.INSTANCE_MANAGER)
-                .handler(message ->
-                        vertx.executeBlocking(future -> {
-                            InstanceRequest instanceRequest = Json.decodeValue(message.body().toString(), InstanceRequest.class);
+                .handler(message -> {
+                    InstanceRequest instanceRequest = Json.decodeValue(message.body().toString(), InstanceRequest.class);
 
-                            logger.info("Received new instance request: " + message.body().toString());
+                    logger.info("Received new instance request: " + message.body().toString());
 
-                            List<DRenderInstance> instances = getNewInstances(instanceRequest.getCloudAMI(), instanceRequest.getCount());
+                    List<DRenderInstance> instances = getNewInstances(instanceRequest.getCloudAMI(), instanceRequest.getCount());
 
-                            future.complete(instances);
+                    //future.complete(instances);
 
-                            // Need to reply here rather than the callback since the result of this event becomes false (not succeeded)
-                            InstanceResponse response = new InstanceResponse("success", instances);
-                            message.reply(Json.encode(response));
-                        }, result -> {
-                            // Do nothing
-                        })
-                );
+                    // Need to reply here rather than the callback since the result of this event becomes false (not succeeded)
+                    InstanceResponse response = new InstanceResponse("success", instances);
+                    message.reply(Json.encode(response));
+                });
 
         eventBus.consumer(Channels.NEW_STORAGE)
                 .handler(message -> {
