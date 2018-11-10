@@ -33,7 +33,7 @@ import java.util.stream.Collectors;
 
 public class DRenderDriver extends AbstractVerticle {
 
-    private final int FRAMES_PER_MACHINE = 20;
+    private final int FRAMES_PER_MACHINE = 50;
     private final int HEARTBEAT_TIMER = 15 * 1000; // 15 seconds
     public static MessageQ MESSAGE_Q;
 
@@ -497,12 +497,12 @@ public class DRenderDriver extends AbstractVerticle {
     }
 
     private void handleFrameRenderedMessage(JobFrame jobFrame) {
-        checkSource(jobFrame.getSource())
+        checkSource(jobFrame.getOutputURI())
                 .setHandler(ar -> {
                     if (ar.succeeded()) {
                         boolean exists = ar.result();
                         if (exists) {
-                            dRenderDriverModel.updateJobFrames(jobFrame.getJobID(), jobFrame.getFrame());
+                            dRenderDriverModel.updateJobFrames(jobFrame.getJobID(), jobFrame.getLastFrameRendered());
                         } else {
                             logger.error("Frame does not exist: " + jobFrame);
                         }
