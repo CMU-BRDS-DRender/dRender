@@ -6,7 +6,7 @@ public class ImageFactory {
         switch (software) {
             case "blender":
             default:
-                return "ami-069aa902e21369609";
+                return "ami-064f1f98f25b73a81";
         }
     }
 }
