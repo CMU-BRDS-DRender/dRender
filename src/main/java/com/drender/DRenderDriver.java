@@ -349,10 +349,11 @@ public class DRenderDriver extends AbstractVerticle {
      * @param instance
      */
     private void scheduleHeartbeat(DRenderInstance instance) {
+        long TIMEOUT = 30 * 1000; // 30 seconds
         long timerId = vertx.setPeriodic(HEARTBEAT_TIMER, id -> {
             EventBus eventBus = vertx.eventBus();
             InstanceHeartbeat instanceHeartbeat = new InstanceHeartbeat(instance, DRenderInstanceAction.HEARTBEAT_CHECK);
-            eventBus.send(Channels.HEARTBEAT, Json.encode(instanceHeartbeat));
+            eventBus.send(Channels.HEARTBEAT, Json.encode(instanceHeartbeat), new DeliveryOptions().setSendTimeout(TIMEOUT));
         });
 
         dRenderDriverModel.updateInstanceTimer(instance.getID(), timerId);

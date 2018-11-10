@@ -33,7 +33,7 @@ public class HttpUtils {
 
                     future.complete(responseObject);
                 } else {
-                    future.fail("Could not convert response: " + ar.cause());
+                    future.fail("GET Failed: " + ar.cause());
                 }
             });
         return future;
@@ -52,7 +52,7 @@ public class HttpUtils {
 
                     future.complete(responseObject);
                 } else {
-                    future.fail("Could not convert response: " + ar.cause());
+                    future.fail("GET Failed: " + ar.cause());
                 }
             });
         return future;
