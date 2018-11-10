@@ -59,8 +59,10 @@ public class EC2Provisioner {
         instanceIds = instanceList.stream().map(Instance::getInstanceId).collect(Collectors.toList()).toArray(instanceIds);
 
         DescribeInstancesRequest waitRequest = new DescribeInstancesRequest().withInstanceIds(instanceIds);
+        DescribeInstanceStatusRequest statusRequest = new DescribeInstanceStatusRequest().withInstanceIds(instanceIds);
 
         ec2Client.waiters().instanceRunning().run(new WaiterParameters<DescribeInstancesRequest>().withRequest(waitRequest));
+        ec2Client.waiters().instanceStatusOk().run(new WaiterParameters<DescribeInstanceStatusRequest>().withRequest(statusRequest));
 
         instanceList = ec2Client.describeInstances(new DescribeInstancesRequest()
                 .withInstanceIds(instanceIds))
