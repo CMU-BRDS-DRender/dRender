@@ -121,7 +121,7 @@ public class DRenderDriver extends AbstractVerticle {
         config.setPassword("brds18749");
 
         RabbitMQClient client = RabbitMQClient.create(vertx, config);
-        client.basicConsume(DRenderDriver.MESSAGE_Q.getQueue(), Channels.DRIVER_FRAMES, false, consumeResult -> {
+        client.basicConsume(DRenderDriver.MESSAGE_Q.getQueue(), Channels.DRIVER_FRAMES, consumeResult -> {
             if (consumeResult.succeeded()) {
                 logger.info("RabbitMQ consumer created!");
             } else {
