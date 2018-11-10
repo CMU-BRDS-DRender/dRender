@@ -44,6 +44,8 @@ public class HttpUtils {
     public <T, R> Future<R> post(String domain, String uri, int port, T requestBody, Class<R> resClass) {
         final Future<R> future = Future.future();
 
+        logger.info("POST Request: " + domain + ":" + port + uri);
+
         client
             .post(port, domain, uri)
             .putHeader("content-type", "application/json")
@@ -51,7 +53,7 @@ public class HttpUtils {
                 if (ar.succeeded()) {
                     HttpResponse<Buffer> response = ar.result();
                     R responseObject = Json.decodeValue(response.body(), resClass);
-
+                    logger.info("Received response: " + response.bodyAsString());
                     future.complete(responseObject);
                 } else {
                     future.fail("GET Failed: " + ar.cause());
