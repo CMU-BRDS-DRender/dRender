@@ -70,8 +70,7 @@ public class DRenderDriver extends AbstractVerticle {
                          * This is done as spawning of instances takes time. This prevents the blocking of event loop.
                          */
                         case START:
-                            vertx.executeBlocking(future -> {
-                                startProject(projectRequest)
+                            startProject(projectRequest)
                                     .setHandler(ar -> {
                                         if (ar.succeeded()) {
                                             message.reply(Json.encode(ar.result()));
@@ -79,9 +78,6 @@ public class DRenderDriver extends AbstractVerticle {
                                             message.reply(Json.encode(ar.cause()));
                                         }
                                     });
-                            }, result -> {
-                                // Nothing needs to be done here
-                            });
                             break;
                         case STATUS:
                             message.reply(Json.encode(getStatus(projectRequest.getId())));
