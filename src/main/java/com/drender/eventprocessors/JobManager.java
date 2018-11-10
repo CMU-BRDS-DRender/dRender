@@ -35,7 +35,7 @@ public class JobManager extends AbstractVerticle {
                                                     JobResponse.builder()
                                                     .ID(job.getID())
                                                     .projectID(job.getProjectID())
-                                                    .outputURI(job.getOutputURI())
+                                                    //.outputURI(job.getOutputURI())
                                                     .message("Could not start job: " + ar.cause())
                                                     .build();
                                             message.fail(500, Json.encode(errorResponse));
