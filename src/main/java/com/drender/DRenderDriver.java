@@ -269,6 +269,7 @@ public class DRenderDriver extends AbstractVerticle {
                         .projectID(project.getID())
                         .source(project.getSource())
                         .action(JobAction.START)
+                        .messageQ(DRenderDriver.MESSAGE_Q)
                         .build();
 
             jobs.add(job);
