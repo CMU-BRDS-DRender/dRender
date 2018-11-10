@@ -121,12 +121,18 @@ public class DRenderDriver extends AbstractVerticle {
         config.setPassword("brds18749");
 
         RabbitMQClient client = RabbitMQClient.create(vertx, config);
-        client.basicConsume(DRenderDriver.MESSAGE_Q.getQueue(), Channels.DRIVER_FRAMES, consumeResult -> {
-            if (consumeResult.succeeded()) {
-                logger.info("RabbitMQ consumer created!");
+        client.start(ar -> {
+            if (ar.succeeded()) {
+                client.basicConsume(DRenderDriver.MESSAGE_Q.getQueue(), Channels.DRIVER_FRAMES, consumeResult -> {
+                    if (consumeResult.succeeded()) {
+                        logger.info("RabbitMQ consumer created!");
+                    } else {
+                        logger.error("Could not create consumer");
+                        consumeResult.cause().printStackTrace();
+                    }
+                });
             } else {
-                logger.error("Could not create consumer");
-                consumeResult.cause().printStackTrace();
+                logger.error("Could not start RabbitMQ client");
             }
         });
     }
