@@ -3,19 +3,24 @@ package com.drender.utils;
 import io.vertx.core.Future;
 import io.vertx.core.Vertx;
 import io.vertx.core.buffer.Buffer;
+import io.vertx.core.http.HttpClient;
+import io.vertx.core.http.HttpClientRequest;
 import io.vertx.core.json.Json;
 import io.vertx.core.logging.Logger;
 import io.vertx.core.logging.LoggerFactory;
 import io.vertx.ext.web.client.HttpResponse;
 import io.vertx.ext.web.client.WebClient;
+import org.apache.http.protocol.HTTP;
 
 public class HttpUtils {
 
     private WebClient client;
+    private HttpClient httpClient;
     private Logger logger = LoggerFactory.getLogger(HttpUtils.class);
 
     public HttpUtils(Vertx vertx) {
         this.client = WebClient.create(vertx);
+        this.httpClient = vertx.createHttpClient();
     }
 
     public <R> Future<R> get(String domain, String uri, int port, Class<R> clazz) {
@@ -46,7 +51,7 @@ public class HttpUtils {
 
         logger.info("POST Request: " + domain + ":" + port + uri + " Body: " + Json.encode(requestBody));
 
-        client
+        /*client
             .post(port, domain, uri)
             .putHeader("content-type", "application/json")
             .sendJson(requestBody, ar -> {
@@ -59,7 +64,22 @@ public class HttpUtils {
                     ar.cause().printStackTrace();
                     future.fail("POST Failed: " + ar.cause());
                 }
+            });*/
+
+        HttpClientRequest request = httpClient.post(port, domain, uri, response -> {
+            response.bodyHandler(body -> {
+                R responseObject = Json.decodeValue(body, resClass);
+                logger.info("Received response: " + body.toString());
+                future.complete(responseObject);
             });
+            response.exceptionHandler(exp -> {
+                exp.printStackTrace();
+                future.fail("POST Failed: " + exp.getCause());
+            });
+        });
+        request.putHeader("content-type", "application/json");
+        request.end(Json.encode(requestBody));
+
         return future;
     }
 }
