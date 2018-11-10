@@ -26,7 +26,7 @@ public class JobManager extends AbstractVerticle {
 
                     switch (job.getAction()) {
                         case START:
-                            httpUtils.post(job.getInstance().getDnsName(), "/start", 8080, job, JobResponse.class)
+                            httpUtils.post(job.getInstance().getIp(), "/start", 8080, job, JobResponse.class)
                                     .setHandler(ar -> {
                                         if (ar.succeeded()) {
                                             message.reply(Json.encode(ar.result()));
