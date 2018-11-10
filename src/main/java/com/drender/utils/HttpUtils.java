@@ -4,6 +4,7 @@ import io.vertx.core.Future;
 import io.vertx.core.Vertx;
 import io.vertx.core.buffer.Buffer;
 import io.vertx.core.json.Json;
+import io.vertx.core.json.JsonObject;
 import io.vertx.core.logging.Logger;
 import io.vertx.core.logging.LoggerFactory;
 import io.vertx.ext.web.client.HttpResponse;
@@ -49,7 +50,7 @@ public class HttpUtils {
         client
             .post(port, domain, uri)
             .putHeader("content-type", "application/json")
-            .sendJson(requestBody, ar -> {
+            .sendJsonObject(JsonObject.mapFrom(requestBody), ar -> {
                 if (ar.succeeded()) {
                     HttpResponse<Buffer> response = ar.result();
                     R responseObject = Json.decodeValue(response.body(), resClass);
