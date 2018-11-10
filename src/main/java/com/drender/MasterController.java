@@ -6,6 +6,7 @@ import com.drender.model.project.ProjectAction;
 import com.drender.model.project.ProjectRequest;
 import com.drender.model.project.ProjectResponse;
 import io.vertx.core.AbstractVerticle;
+import io.vertx.core.DeploymentOptions;
 import io.vertx.core.Future;
 import io.vertx.core.eventbus.DeliveryOptions;
 import io.vertx.core.eventbus.EventBus;
@@ -25,7 +26,7 @@ public class MasterController extends AbstractVerticle {
         logger.info("Starting...");
 
         // deploy Driver
-        vertx.deployVerticle(new DRenderDriver());
+        vertx.deployVerticle(new DRenderDriver(), new DeploymentOptions().setMaxWorkerExecuteTime(5* 60L * 1000 * 1000000));
 
         Router router = Router.router(vertx);
 
