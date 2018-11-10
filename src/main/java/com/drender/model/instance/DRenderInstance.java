@@ -10,5 +10,5 @@ import lombok.*;
 @AllArgsConstructor
 public class DRenderInstance {
     private String ID;
-    private String ip;
+    private String dnsName;
 }

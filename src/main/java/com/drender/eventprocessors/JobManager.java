@@ -1,6 +1,5 @@
 package com.drender.eventprocessors;
 
-import com.drender.DRenderDriver;
 import com.drender.utils.HttpUtils;
 import com.drender.model.Channels;
 import com.drender.model.job.Job;
@@ -10,8 +9,6 @@ import io.vertx.core.eventbus.EventBus;
 import io.vertx.core.json.Json;
 import io.vertx.core.logging.Logger;
 import io.vertx.core.logging.LoggerFactory;
-import io.vertx.rabbitmq.RabbitMQClient;
-import io.vertx.rabbitmq.RabbitMQOptions;
 
 public class JobManager extends AbstractVerticle {
 
@@ -29,7 +26,7 @@ public class JobManager extends AbstractVerticle {
 
                     switch (job.getAction()) {
                         case START:
-                            httpUtils.post(job.getInstance().getIp(), "/start", 8080, job, JobResponse.class)
+                            httpUtils.post(job.getInstance().getDnsName(), "/start", 8080, job, JobResponse.class)
                                     .setHandler(ar -> {
                                         if (ar.succeeded()) {
                                             message.reply(Json.encode(ar.result()));

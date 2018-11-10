@@ -31,14 +31,14 @@ public class HeartbeatVerticle extends AbstractVerticle {
                 .handler(message -> {
                     InstanceHeartbeat instanceHeartbeat = Json.decodeValue(message.body().toString(), InstanceHeartbeat.class);
 
-                    httpUtils.get(instanceHeartbeat.getInstance().getIp(), "/nodeStatus", 8080, JobResponse.class)
+                    httpUtils.get(instanceHeartbeat.getInstance().getDnsName(), "/nodeStatus", 8080, JobResponse.class)
                             .setHandler(ar -> {
                                 if (!ar.succeeded()) {
                                     logger.info("Heartbeat failed for: " + instanceHeartbeat.getInstance());
                                     DRenderInstanceAction nextAction = DRenderInstanceAction.START_NEW_MACHINE;
                                     // status check failed. Try pinging the machine
                                     try {
-                                        InetAddress address = InetAddress.getByName(instanceHeartbeat.getInstance().getIp());
+                                        InetAddress address = InetAddress.getByName(instanceHeartbeat.getInstance().getDnsName());
                                         boolean reachable = address.isReachable(TIMEOUT);
                                         if (reachable) nextAction = DRenderInstanceAction.RESTART_MACHINE;
                                     } catch (IOException e) {

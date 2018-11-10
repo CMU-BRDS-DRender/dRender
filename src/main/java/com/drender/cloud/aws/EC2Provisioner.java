@@ -78,7 +78,7 @@ public class EC2Provisioner {
             //List<Tag> tagList = new ArrayList<>();
             //tagList.add(nameTag);
             //instance.setTags(tagList);
-            DRenderInstanceList.add(new DRenderInstance(instance.getInstanceId(),instance.getPublicIpAddress()));
+            DRenderInstanceList.add(new DRenderInstance(instance.getInstanceId(),instance.getPublicDnsName()));
         }
 
         logger.info("Spawned EC2 instances: " + DRenderInstanceList);
