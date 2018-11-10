@@ -23,7 +23,6 @@ public class EC2Provisioner {
     private Logger logger = LoggerFactory.getLogger(EC2Provisioner.class);
 
     private final String S3_FULL_ACCESS_ARN = "arn:aws:iam::214187139358:instance-profile/S3FullAccess";
-    private final String ROLE_NAME = "S3FullAccess";
 
     public EC2Provisioner(String region, AWSCredentialsProvider credentialProvider){
         if(ec2Client == null) {
@@ -38,7 +37,6 @@ public class EC2Provisioner {
         return ec2Client;
     }
 
-
     public List<DRenderInstance> spawnInstances(int count, String securityGroup, String sshKeyName, String imageID) throws ExecutionException, InterruptedException {
 
         RunInstancesRequest runInstancesRequest =
@@ -51,7 +49,7 @@ public class EC2Provisioner {
                 .withKeyName(sshKeyName)
                 .withSecurityGroups(securityGroup)
                 .withIamInstanceProfile(
-                        new IamInstanceProfileSpecification().withArn(S3_FULL_ACCESS_ARN).withName(ROLE_NAME)
+                        new IamInstanceProfileSpecification().withArn(S3_FULL_ACCESS_ARN)
                 );
 
         RunInstancesResult result = ec2Client.runInstances(runInstancesRequest);
