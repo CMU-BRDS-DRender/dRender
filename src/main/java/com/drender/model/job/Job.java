@@ -3,16 +3,14 @@ package com.drender.model.job;
 import com.drender.model.cloud.S3Source;
 import com.drender.model.instance.DRenderInstance;
 import com.fasterxml.jackson.annotation.JsonInclude;
-import lombok.Builder;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.Setter;
+import lombok.*;
 
 import java.util.UUID;
 
 @Getter
 @Setter
 @NoArgsConstructor
+@ToString
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public class Job {
     private String ID;
