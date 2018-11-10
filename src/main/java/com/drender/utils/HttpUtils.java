@@ -44,7 +44,7 @@ public class HttpUtils {
     public <T, R> Future<R> post(String domain, String uri, int port, T requestBody, Class<R> resClass) {
         final Future<R> future = Future.future();
 
-        logger.info("POST Request: " + domain + ":" + port + uri + " Body: " + requestBody);
+        logger.info("POST Request: " + domain + ":" + port + uri + " Body: " + Json.encode(requestBody));
 
         client
             .post(port, domain, uri)
