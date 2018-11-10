@@ -47,7 +47,7 @@ public class HttpUtils {
         logger.info("POST Request: " + domain + ":" + port + uri + " Body: " + Json.encode(requestBody));
 
         client
-            .post(port, uri, domain)
+            .post(port, domain, uri)
             .putHeader("content-type", "application/json")
             .sendJson(requestBody, ar -> {
                 if (ar.succeeded()) {
