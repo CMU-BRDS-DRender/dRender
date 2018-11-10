@@ -41,7 +41,7 @@ public class JobManager extends AbstractVerticle {
                                                     .outputURI(job.getOutputURI())
                                                     .message("Could not start job: " + ar.cause())
                                                     .build();
-                                            message.reply(Json.encode(errorResponse));
+                                            message.fail(500, Json.encode(errorResponse));
                                         }
                                     });
                         default:

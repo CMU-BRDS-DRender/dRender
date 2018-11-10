@@ -56,7 +56,7 @@ public class HttpUtils {
                     logger.info("Received response: " + response.bodyAsString());
                     future.complete(responseObject);
                 } else {
-                    future.fail("GET Failed: " + ar.cause());
+                    future.fail("POST Failed: " + ar.cause());
                 }
             });
         return future;

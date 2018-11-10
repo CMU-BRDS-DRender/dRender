@@ -178,15 +178,15 @@ public class DRenderDriver extends AbstractVerticle {
                             instanceIdx++;
                         }
 
-                        // Schedule heartbeat checks for the newly created jobMap
-                        for (DRenderInstance instance : instances) {
-                            scheduleHeartbeat(instance);
-                        }
-
                         // Start jobs
                         for (Job job : dRenderDriverModel.getAllJobs(project.getID())) {
                             job.setAction(JobAction.START);
                             startJob(job);
+                        }
+
+                        // Schedule heartbeat checks for the newly created jobMap
+                        for (DRenderInstance instance : instances) {
+                            scheduleHeartbeat(instance);
                         }
 
                         projectResponseFuture.complete(buildStatus(project));
