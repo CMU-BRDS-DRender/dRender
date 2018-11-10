@@ -184,10 +184,10 @@ public class DRenderDriver extends AbstractVerticle {
                         }
 
                         // Start jobs
-//                        for (Job job : projectJobs.get(project.getID()).values()) {
-//                            job.setAction(JobAction.START_JOB);
-//                            startJob(job);
-//                        }
+                        for (Job job : dRenderDriverModel.getAllJobs(project.getID())) {
+                            job.setAction(JobAction.START);
+                            startJob(job);
+                        }
 
                         projectResponseFuture.complete(buildStatus(project));
 
