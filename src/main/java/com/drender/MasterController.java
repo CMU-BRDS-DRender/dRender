@@ -104,7 +104,7 @@ public class MasterController extends AbstractVerticle {
                 if (ar.succeeded()) {
                     routingContext.response()
                             .putHeader("content-type", "application/json; charset=utf-8")
-                            .end(Json.encode(ar.result().body()));
+                            .end(ar.result().body().toString());
                 }
             }
         );
