@@ -8,6 +8,7 @@ import io.vertx.core.logging.Logger;
 import io.vertx.core.logging.LoggerFactory;
 import io.vertx.ext.web.client.HttpResponse;
 import io.vertx.ext.web.client.WebClient;
+
 public class HttpUtils {
 
     private WebClient client;
@@ -24,6 +25,7 @@ public class HttpUtils {
 
         client
             .get(port, domain, uri)
+            .timeout(5 * 1000) // 5 seconds
             .putHeader("content-type", "application/json")
             .send(ar -> {
                 if (ar.succeeded()) {
