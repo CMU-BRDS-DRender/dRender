@@ -13,6 +13,7 @@ import com.drender.model.instance.InstanceRequest;
 import io.vertx.core.*;
 import io.vertx.core.eventbus.EventBus;
 import io.vertx.core.json.Json;
+import io.vertx.core.json.JsonObject;
 import io.vertx.core.logging.Logger;
 import io.vertx.core.logging.LoggerFactory;
 
@@ -37,19 +38,23 @@ public class ResourceManager extends AbstractVerticle {
 
         EventBus eventBus = vertx.eventBus();
         eventBus.consumer(Channels.INSTANCE_MANAGER)
-                .handler(message -> {
-                    InstanceRequest instanceRequest = Json.decodeValue(message.body().toString(), InstanceRequest.class);
+                .handler(message ->
+                        vertx.executeBlocking(future -> {
+                            InstanceRequest instanceRequest = Json.decodeValue(message.body().toString(), InstanceRequest.class);
 
-                    logger.info("Received new instance request: " + message.body().toString());
+                            logger.info("Received new instance request: " + message.body().toString());
 
-                    List<DRenderInstance> instances = getNewInstances(instanceRequest.getCloudAMI(), instanceRequest.getCount());
+                            List<DRenderInstance> instances = getNewInstances(instanceRequest.getCloudAMI(), instanceRequest.getCount());
 
-                    //future.complete(instances);
+                            future.complete(instances);
 
-                    // Need to reply here rather than the callback since the result of this event becomes false (not succeeded)
-                    InstanceResponse response = new InstanceResponse("success", instances);
-                    message.reply(Json.encode(response));
-                });
+                            // Need to reply here rather than the callback since the result of this event becomes false (not succeeded)
+                            InstanceResponse response = new InstanceResponse("success", instances);
+                            message.reply(Json.encode(response));
+                        }, result -> {
+                            // Do nothing
+                        })
+                );
 
         eventBus.consumer(Channels.NEW_STORAGE)
                 .handler(message -> {
@@ -64,9 +69,11 @@ public class ResourceManager extends AbstractVerticle {
 
         eventBus.consumer(Channels.CHECK_STORAGE)
                 .handler(message -> {
+                    logger.info("Received frame info: " + message.body().toString());
                     S3Source source = Json.decodeValue(message.body().toString(), S3Source.class);
                     boolean exists = storageProvider.checkExists(source);
-                    message.reply(exists);
+                    JsonObject existsResponse = new JsonObject().put("exists", exists);
+                    message.reply(existsResponse);
                 });
     }
 

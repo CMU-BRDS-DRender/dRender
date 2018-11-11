@@ -4,7 +4,7 @@ import com.drender.cloud.ImageFactory;
 import com.drender.eventprocessors.HeartbeatVerticle;
 import com.drender.eventprocessors.JobManager;
 import com.drender.eventprocessors.ResourceManager;
-import com.drender.model.*;
+import com.drender.model.Channels;
 import com.drender.model.cloud.S3Source;
 import com.drender.model.instance.*;
 import com.drender.model.job.Job;
@@ -28,7 +28,9 @@ import io.vertx.core.logging.LoggerFactory;
 import io.vertx.rabbitmq.RabbitMQClient;
 import io.vertx.rabbitmq.RabbitMQOptions;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.List;
 import java.util.stream.Collectors;
 
 public class DRenderDriver extends AbstractVerticle {
@@ -52,7 +54,7 @@ public class DRenderDriver extends AbstractVerticle {
 
         // Deploy all the verticles
         vertx.deployVerticle(new HeartbeatVerticle());
-        vertx.deployVerticle(new ResourceManager(), new DeploymentOptions().setWorker(true).setMaxWorkerExecuteTime(5* 60L * 1000 * 1000000));
+        vertx.deployVerticle(new ResourceManager(), new DeploymentOptions().setMaxWorkerExecuteTime(6* 60L * 1000 * 1000000));
         vertx.deployVerticle(new JobManager());
 
         // setup listeners for dRender Driver
@@ -70,7 +72,8 @@ public class DRenderDriver extends AbstractVerticle {
                          * This is done as spawning of instances takes time. This prevents the blocking of event loop.
                          */
                         case START:
-                            startProject(projectRequest)
+                            vertx.executeBlocking(future -> {
+                                startProject(projectRequest)
                                     .setHandler(ar -> {
                                         if (ar.succeeded()) {
                                             message.reply(Json.encode(ar.result()));
@@ -78,6 +81,9 @@ public class DRenderDriver extends AbstractVerticle {
                                             message.reply(Json.encode(ar.cause()));
                                         }
                                     });
+                            }, result -> {
+                                // Nothing needs to be done here
+                            });
                             break;
                         case STATUS:
                             message.reply(Json.encode(getStatus(projectRequest.getId())));
@@ -103,7 +109,8 @@ public class DRenderDriver extends AbstractVerticle {
         // Consumer for JobFrame related messages
         eventBus.consumer(Channels.DRIVER_FRAMES)
                 .handler(message -> {
-                    JobFrame frame = Json.decodeValue(message.body().toString(), JobFrame.class);
+                    JsonObject jsonObject = (JsonObject) message.body();
+                    JobFrame frame = Json.decodeValue(jsonObject.getString("body"), JobFrame.class);
                     handleFrameRenderedMessage(frame);
                 });
     }
@@ -288,7 +295,7 @@ public class DRenderDriver extends AbstractVerticle {
         InstanceRequest instanceRequest = new InstanceRequest(cloudAMI, count);
 
         final Future<List<DRenderInstance>> ips = Future.future();
-        final long TIMEOUT = 5 * 60 * 1000; // 5 minutes (in ms)
+        final long TIMEOUT = 6 * 60 * 1000; // 6 minutes (in ms)
 
         eventBus.send(Channels.INSTANCE_MANAGER, Json.encode(instanceRequest), new DeliveryOptions().setSendTimeout(TIMEOUT),
             ar -> {
@@ -329,11 +336,11 @@ public class DRenderDriver extends AbstractVerticle {
         EventBus eventBus = vertx.eventBus();
         final Future<Boolean> future = Future.future();
 
-        eventBus.send(Channels.CHECK_STORAGE, source,
+        eventBus.send(Channels.CHECK_STORAGE, Json.encode(source),
             ar -> {
                 if (ar.succeeded()) {
-                    JsonObject response = Json.decodeValue(ar.result().body().toString(), JsonObject.class);
-                    future.complete(response.getBoolean("exists"));
+                    JsonObject jsonObject = (JsonObject) ar.result().body();
+                    future.complete(jsonObject.getBoolean("exists"));
                 } else {
                     future.fail("Could not verify storage: " + ar.cause());
                 }
@@ -501,12 +508,12 @@ public class DRenderDriver extends AbstractVerticle {
                     if (ar.succeeded()) {
                         boolean exists = ar.result();
                         if (exists) {
-                            dRenderDriverModel.updateJobFrames(jobFrame.getJobID(), jobFrame.getLastFrameRendered());
+                            dRenderDriverModel.updateJobFrames(jobFrame.getJobId(), jobFrame.getLastFrameRendered());
                         } else {
                             logger.error("Frame does not exist: " + jobFrame);
                         }
                     } else {
-                        logger.error("Could not handle frame render message:" + jobFrame);
+                        logger.error("Could not handle frame render message: " + jobFrame);
                     }
                 });
     }

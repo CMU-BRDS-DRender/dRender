@@ -26,7 +26,7 @@ public class MasterController extends AbstractVerticle {
         logger.info("Starting...");
 
         // deploy Driver
-        vertx.deployVerticle(new DRenderDriver(), new DeploymentOptions().setMaxWorkerExecuteTime(5* 60L * 1000 * 1000000));
+        vertx.deployVerticle(new DRenderDriver(), new DeploymentOptions().setMaxWorkerExecuteTime(6* 60L * 1000 * 1000000));
 
         Router router = Router.router(vertx);
 

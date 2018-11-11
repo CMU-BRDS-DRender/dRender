@@ -11,6 +11,6 @@ import lombok.Setter;
 @AllArgsConstructor
 @NoArgsConstructor
 public class S3Source {
-    String bucketName;
-    String file;
+    private String bucketName;
+    private String file;
 }

@@ -16,7 +16,7 @@ import java.util.List;
 @JsonInclude(JsonInclude.Include.NON_NULL)
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class JobFrame {
-    private String jobID;
+    private String jobId;
     private int lastFrameRendered;
     private S3Source outputURI;
 }
