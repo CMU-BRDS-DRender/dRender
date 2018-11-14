@@ -103,6 +103,8 @@ public class EC2Provisioner {
         DescribeInstancesRequest waitRequest = new DescribeInstancesRequest().withInstanceIds(terminatingList);
 
         ec2Client.waiters().instanceTerminated().run(new WaiterParameters<DescribeInstancesRequest>().withRequest(waitRequest));
+
+        logger.info("Killed EC2 instances: " + instanceIds);
     }
 
 }

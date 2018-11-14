@@ -5,6 +5,6 @@ import io.vertx.core.Launcher;
 public class Application {
     public static void main(String[] args) {
         Launcher.executeCommand("run", MasterController.class.getName(),
-                                "-Dvertx.options.blockedThreadCheckInterval=360000000000");
+                                "-Dvertx.options.blockedThreadCheckInterval=480000000000");
     }
 }

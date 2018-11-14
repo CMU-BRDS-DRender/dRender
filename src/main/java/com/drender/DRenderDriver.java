@@ -35,7 +35,7 @@ public class DRenderDriver extends AbstractVerticle {
     private final int FRAMES_PER_MACHINE = 50;
     private final int HEARTBEAT_TIMER = 15 * 1000; // 15 seconds
     private final int PROJECT_STATUS_TIMER = 10 * 1000; // 10 seconds
-    private final long MAX_WORKER_TIME = 6* 60 * 1000 * 1000000L;
+    private final long MAX_WORKER_TIME = 8* 60 * 1000 * 1000000L; // 8 minutes
     public static MessageQ MESSAGE_Q;
 
     private DRenderDriverModel dRenderDriverModel;
@@ -98,6 +98,7 @@ public class DRenderDriver extends AbstractVerticle {
                     InstanceHeartbeat instance = Json.decodeValue(message.body().toString(), InstanceHeartbeat.class);
                     switch (instance.getAction()) {
                         case START_NEW_MACHINE:
+                            // TODO: Add machine to queue and call handleNewMachineStart
                             //handleNewMachineStart(instance);
                             break;
                         case RESTART_MACHINE:
@@ -192,7 +193,7 @@ public class DRenderDriver extends AbstractVerticle {
                             scheduleHeartbeat(instance);
                         }
 
-                        //scheduleCompletionCheck(project.getID());
+                        scheduleCompletionCheck(project.getID());
 
                         projectResponseFuture.complete(buildStatus(project));
 
@@ -250,6 +251,7 @@ public class DRenderDriver extends AbstractVerticle {
             );
         }
         log.put("jobs", jobLogs);
+        log.put("message", "Jobs are running");
         return log;
     }
 
@@ -300,7 +302,7 @@ public class DRenderDriver extends AbstractVerticle {
         InstanceRequest instanceRequest = new InstanceRequest(DRenderInstanceAction.START_NEW_MACHINE, request);
 
         final Future<List<DRenderInstance>> ips = Future.future();
-        final long TIMEOUT = 6 * 60 * 1000; // 6 minutes (in ms)
+        final long TIMEOUT = 8 * 60 * 1000; // 8 minutes (in ms)
 
         eventBus.send(Channels.INSTANCE_MANAGER, Json.encode(instanceRequest), new DeliveryOptions().setSendTimeout(TIMEOUT),
             ar -> {
@@ -337,6 +339,11 @@ public class DRenderDriver extends AbstractVerticle {
         return future;
     }
 
+    /**
+     * Checks if the given image exists in S3
+     * @param source
+     * @return
+     */
     private Future<Boolean> checkSource(S3Source source) {
         EventBus eventBus = vertx.eventBus();
         final Future<Boolean> future = Future.future();
@@ -372,28 +379,70 @@ public class DRenderDriver extends AbstractVerticle {
 
     /**
      * Removes scheduled heartbeat check for this instance
-     * @param instance
+     * @param instanceID
      */
-    private void removeHeartbeat(DRenderInstance instance) {
-        long timerId = dRenderDriverModel.getInstanceHeartbeatTimer(instance.getID());
+    private void removeHeartbeat(String instanceID) {
+        long timerId = dRenderDriverModel.getInstanceHeartbeatTimer(instanceID);
         if (vertx.cancelTimer(timerId)) {
-            logger.info("Unregistered timer for instance: " + instance);
+            logger.info("Unregistered timer for instance ID: " + instanceID);
         } else {
-            logger.info("Could not unregister. Timer does not exist for instance: " + instance);
+            logger.info("Could not unregister. Timer does not exist for instance ID: " + instanceID);
         }
     }
 
+    /**
+     * Schedules checks the current status of the project.
+     * Does not actively check each time a frame is rendered, rather checks every PROJECT_STATUS_TIMER seconds
+     * If the project is complete, then it terminates all the instances
+     * @param projectID
+     */
     private void scheduleCompletionCheck(String projectID) {
         long timerId = vertx.setPeriodic(PROJECT_STATUS_TIMER, id -> {
             boolean status = dRenderDriverModel.isProjectComplete(projectID);
             if (status) {
-                logger.info("Project Complete: " + projectID);
-                //EventBus eventBus = vertx.eventBus();
-                //List<String> instanceIds = dRenderDriverModel.getin
+                logger.info("Project \"" + projectID + "\" status: Complete");
+
+                vertx.cancelTimer(id);
+
+                terminateProjectInstances(projectID);
+                dRenderDriverModel.getAllJobIds(projectID)
+                        .forEach(jobId -> dRenderDriverModel.updateJobActiveState(jobId, false));
             } else {
-                logger.info("Project Incomplete: " + projectID);
+                logger.info("Project \"" + projectID + "\" status: Incomplete");
             }
         });
+    }
+
+    /**
+     * Terminates all the instances for this project
+     * @param projectID
+     * @return
+     */
+    private Future<Void> terminateProjectInstances(String projectID) {
+        Future<Void> future = Future.future();
+
+        List<String> instanceIds = dRenderDriverModel.getInstances(projectID)
+                .stream()
+                .map(DRenderInstance::getID)
+                .collect(Collectors.toList());
+
+        // Remove timers
+        instanceIds.forEach(this::removeHeartbeat);
+
+        // Terminate instances
+        JsonObject instanceArray = new JsonObject().put("instances", new JsonArray(instanceIds));
+        InstanceRequest request = new InstanceRequest(DRenderInstanceAction.KILL_MACHINE, instanceArray);
+
+        EventBus eventBus = vertx.eventBus();
+        eventBus.send(Channels.INSTANCE_MANAGER, Json.encode(request), ar -> {
+            if (ar.succeeded()) {
+                future.complete();
+            } else {
+                future.fail("Could not terminate instances: " + ar.cause());
+            }
+        });
+
+        return future;
     }
 
     /**
@@ -476,7 +525,7 @@ public class DRenderDriver extends AbstractVerticle {
         }
 
         // Remove timer for old instance
-        removeHeartbeat(instanceHeartbeat.getInstance());
+        removeHeartbeat(instanceHeartbeat.getInstance().getID());
         dRenderDriverModel.removeInstance(instanceHeartbeat.getInstance());
     }
 

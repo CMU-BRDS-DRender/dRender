@@ -127,10 +127,11 @@ public class DRenderDriverModel {
     }
 
     public List<DRenderInstance> getInstances(String projectId) {
-//        projectJobs.getOrDefault(projectId, new ArrayList<>())
-//                .stream()
-//                .map(jobId -> )
-        return new ArrayList<>();
+        return projectJobs.getOrDefault(projectId, new ArrayList<>())
+                .stream()
+                .map(jobId -> jobMap.get(jobId).getInstance())
+                .distinct()// an instance could be running multiple jobs
+                .collect(Collectors.toList());
     }
 
     public void updateInstances(List<Job> jobs) {
@@ -156,7 +157,12 @@ public class DRenderDriverModel {
 
     public Job updateJobInstance(String jobID, DRenderInstance instance) {
         jobMap.get(jobID).setInstance(instance);
-        // TODO: Update instanceJobs as well
+        instanceJobs.merge(instance, Collections.singletonList(jobID),
+                (oldList, newList) -> Stream.of(oldList, newList)
+                                            .flatMap(Collection::stream)
+                                            .distinct()
+                                            .collect(Collectors.toList()));
+
         return jobMap.get(jobID);
     }
 

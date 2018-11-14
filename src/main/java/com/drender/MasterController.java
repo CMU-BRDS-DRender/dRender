@@ -11,6 +11,7 @@ import io.vertx.core.Future;
 import io.vertx.core.eventbus.DeliveryOptions;
 import io.vertx.core.eventbus.EventBus;
 import io.vertx.core.json.Json;
+import io.vertx.core.json.JsonObject;
 import io.vertx.core.logging.Logger;
 import io.vertx.core.logging.LoggerFactory;
 import io.vertx.ext.web.Router;
@@ -68,7 +69,7 @@ public class MasterController extends AbstractVerticle {
 
         logger.info("Received new project request: " + Json.encode(projectRequest));
 
-        final long TIMEOUT = 5 * 60 * 1000; // 5 minutes (in ms)
+        final long TIMEOUT = 8 * 60 * 1000; // 8 minutes (in ms)
 
         // Send the start message to Driver
         EventBus eventBus = vertx.eventBus();
@@ -81,6 +82,16 @@ public class MasterController extends AbstractVerticle {
                             .end(Json.encode(response));
                 } else {
                     logger.error("Failed to start project: " + ar.cause());
+                    routingContext.response()
+                            .putHeader("content-type", "application/json; charset=utf-8")
+                            .end(Json.encode(
+                                    ProjectResponse.builder()
+                                    .id(projectRequest.getId())
+                                    .startFrame(projectRequest.getStartFrame())
+                                    .endFrame(projectRequest.getEndFrame())
+                                    .isComplete(false)
+                                    .log(new JsonObject().put("message", "Failed to start jobs: " + ar.cause()))
+                            ));
                 }
             }
         );
