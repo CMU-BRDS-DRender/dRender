@@ -1,9 +1,9 @@
 package com.drender.model.instance;
 
-import lombok.AllArgsConstructor;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.Setter;
+import com.drender.model.project.JsonObjectDeserializer;
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
+import io.vertx.core.json.JsonObject;
+import lombok.*;
 
 import java.util.List;
 
@@ -12,9 +12,12 @@ import java.util.List;
  */
 @Getter
 @Setter
+@ToString
 @AllArgsConstructor
 @NoArgsConstructor
 public class InstanceRequest {
-    private String cloudAMI;
-    private int count;
+    private DRenderInstanceAction action;
+
+    @JsonDeserialize(using = JsonObjectDeserializer.class)
+    private JsonObject request;
 }

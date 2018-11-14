@@ -34,6 +34,7 @@ public class DRenderDriver extends AbstractVerticle {
 
     private final int FRAMES_PER_MACHINE = 50;
     private final int HEARTBEAT_TIMER = 15 * 1000; // 15 seconds
+    private final int PROJECT_STATUS_TIMER = 10 * 1000; // 10 seconds
     private final long MAX_WORKER_TIME = 6* 60 * 1000 * 1000000L;
     public static MessageQ MESSAGE_Q;
 
@@ -191,6 +192,8 @@ public class DRenderDriver extends AbstractVerticle {
                             scheduleHeartbeat(instance);
                         }
 
+                        //scheduleCompletionCheck(project.getID());
+
                         projectResponseFuture.complete(buildStatus(project));
 
                     } else {
@@ -291,7 +294,10 @@ public class DRenderDriver extends AbstractVerticle {
      */
     private Future<List<DRenderInstance>> spawnMachines(String cloudAMI, int count) {
         EventBus eventBus = vertx.eventBus();
-        InstanceRequest instanceRequest = new InstanceRequest(cloudAMI, count);
+        JsonObject request = new JsonObject()
+                                    .put("cloudAMI", cloudAMI)
+                                    .put("count", count);
+        InstanceRequest instanceRequest = new InstanceRequest(DRenderInstanceAction.START_NEW_MACHINE, request);
 
         final Future<List<DRenderInstance>> ips = Future.future();
         final long TIMEOUT = 6 * 60 * 1000; // 6 minutes (in ms)
@@ -375,6 +381,19 @@ public class DRenderDriver extends AbstractVerticle {
         } else {
             logger.info("Could not unregister. Timer does not exist for instance: " + instance);
         }
+    }
+
+    private void scheduleCompletionCheck(String projectID) {
+        long timerId = vertx.setPeriodic(PROJECT_STATUS_TIMER, id -> {
+            boolean status = dRenderDriverModel.isProjectComplete(projectID);
+            if (status) {
+                logger.info("Project Complete: " + projectID);
+                //EventBus eventBus = vertx.eventBus();
+                //List<String> instanceIds = dRenderDriverModel.getin
+            } else {
+                logger.info("Project Incomplete: " + projectID);
+            }
+        });
     }
 
     /**

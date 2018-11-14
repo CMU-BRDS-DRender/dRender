@@ -126,6 +126,13 @@ public class DRenderDriverModel {
         updateInstances(jobs);
     }
 
+    public List<DRenderInstance> getInstances(String projectId) {
+//        projectJobs.getOrDefault(projectId, new ArrayList<>())
+//                .stream()
+//                .map(jobId -> )
+        return new ArrayList<>();
+    }
+
     public void updateInstances(List<Job> jobs) {
         Map<DRenderInstance, List<String>> instanceJobIds =
                 jobs.stream()
@@ -149,6 +156,7 @@ public class DRenderDriverModel {
 
     public Job updateJobInstance(String jobID, DRenderInstance instance) {
         jobMap.get(jobID).setInstance(instance);
+        // TODO: Update instanceJobs as well
         return jobMap.get(jobID);
     }
 

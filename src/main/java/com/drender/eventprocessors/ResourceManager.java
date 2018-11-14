@@ -13,11 +13,13 @@ import com.drender.model.instance.InstanceRequest;
 import io.vertx.core.*;
 import io.vertx.core.eventbus.EventBus;
 import io.vertx.core.json.Json;
+import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import io.vertx.core.logging.Logger;
 import io.vertx.core.logging.LoggerFactory;
 
 import java.util.List;
+import java.util.stream.Collectors;
 
 public class ResourceManager extends AbstractVerticle {
 
@@ -38,23 +40,46 @@ public class ResourceManager extends AbstractVerticle {
 
         EventBus eventBus = vertx.eventBus();
         eventBus.consumer(Channels.INSTANCE_MANAGER)
-                .handler(message ->
-                        vertx.executeBlocking(future -> {
-                            InstanceRequest instanceRequest = Json.decodeValue(message.body().toString(), InstanceRequest.class);
+                .handler(message -> {
+                        InstanceRequest instanceRequest = Json.decodeValue(message.body().toString(), InstanceRequest.class);
+                        JsonObject request = instanceRequest.getRequest();
+                        switch (instanceRequest.getAction()) {
+                            case START_NEW_MACHINE:
+                                vertx.executeBlocking(future -> {
+                                    logger.info("Received new instance request: " + message.body().toString());
 
-                            logger.info("Received new instance request: " + message.body().toString());
+                                    List<DRenderInstance> instances = getNewInstances(request.getString("cloudAMI"),
+                                                                                      request.getInteger("count"));
 
-                            List<DRenderInstance> instances = getNewInstances(instanceRequest.getCloudAMI(), instanceRequest.getCount());
+                                    future.complete(instances);
 
-                            future.complete(instances);
+                                    // Need to reply here rather than the callback since the result of this event becomes false (not succeeded)
+                                    InstanceResponse response = new InstanceResponse("success", instances);
+                                    message.reply(Json.encode(response));
+                                }, result -> {
+                                    // Do nothing
+                                });
+                                break;
 
-                            // Need to reply here rather than the callback since the result of this event becomes false (not succeeded)
-                            InstanceResponse response = new InstanceResponse("success", instances);
-                            message.reply(Json.encode(response));
-                        }, result -> {
-                            // Do nothing
-                        })
-                );
+                            case RESTART_MACHINE:
+                            case KILL_MACHINE:
+                                JsonArray instances = request.getJsonArray("instances");
+                                List<String> instanceIds = instances
+                                                                .stream()
+                                                                .map(Object::toString)
+                                                                .collect(Collectors.toList());
+                                vertx.executeBlocking(future -> {
+                                    logger.info("Received instance termination request: " + instanceIds);
+                                    killInstances(instanceIds);
+                                    future.complete();
+
+                                    InstanceResponse response = InstanceResponse.builder().message("success").build();
+                                    message.reply(Json.encode(response));
+                                }, result -> {
+
+                                });
+                        }
+                });
 
         eventBus.consumer(Channels.NEW_STORAGE)
                 .handler(message -> {
@@ -81,7 +106,16 @@ public class ResourceManager extends AbstractVerticle {
         String region = "us-east-1a";
         String securityGroupName = "HTTP Open";
         String sshKeyName = "drender";
-        AWSRequestProperty awsRequestProperty = new AWSRequestProperty(sshKeyName, securityGroupName, count, region, cloudAMI);
-        return machineProvider.startMachines(awsRequestProperty);
+        AWSRequestProperty awsRequestProperty = new AWSRequestProperty(sshKeyName, securityGroupName, region, cloudAMI);
+        return machineProvider.startMachines(awsRequestProperty, count);
+    }
+
+    private void killInstances(List<String> instanceIds) {
+        String region = "us-east-1a";
+        String securityGroupName = "HTTP Open";
+        String sshKeyName = "drender";
+        AWSRequestProperty awsRequestProperty = new AWSRequestProperty(sshKeyName, securityGroupName, region);
+
+        machineProvider.killMachines(awsRequestProperty, instanceIds);
     }
 }

@@ -88,4 +88,21 @@ public class EC2Provisioner {
         return DRenderInstanceList;
     }
 
+    public void killInstances(List<String> instanceIds) {
+        TerminateInstancesRequest terminateInstancesRequest = new TerminateInstancesRequest();
+
+        terminateInstancesRequest.withInstanceIds(instanceIds);
+        TerminateInstancesResult result = ec2Client.terminateInstances(terminateInstancesRequest);
+
+        String[] terminatingList = new String[result.getTerminatingInstances().size()];
+        result.getTerminatingInstances()
+                .stream()
+                .map(InstanceStateChange::getInstanceId)
+                .collect(Collectors.toList()).toArray(terminatingList);
+
+        DescribeInstancesRequest waitRequest = new DescribeInstancesRequest().withInstanceIds(terminatingList);
+
+        ec2Client.waiters().instanceTerminated().run(new WaiterParameters<DescribeInstancesRequest>().withRequest(waitRequest));
+    }
+
 }

@@ -40,11 +40,11 @@ public class AWSProvider implements MachineProvider<AWSRequestProperty>{
 
 
     @Override
-    public List<DRenderInstance> startMachines(AWSRequestProperty property) {
+    public List<DRenderInstance> startMachines(AWSRequestProperty property, int count) {
         ec2Provisioner = new EC2Provisioner(property.getRegion(), credentialProvider);
         try {
             List<DRenderInstance> instances =
-                    ec2Provisioner.spawnInstances(property.getCount(),
+                    ec2Provisioner.spawnInstances(count,
                             property.getSecurityGroup(),
                             property.getSshKeyName(),
                             property.getMachineImageId());
@@ -61,8 +61,9 @@ public class AWSProvider implements MachineProvider<AWSRequestProperty>{
     }
 
     @Override
-    public boolean killMachine(DRenderInstance instance) {
-        return false;
+    public void killMachines(AWSRequestProperty property, List<String> ids) {
+        ec2Provisioner = new EC2Provisioner(property.getRegion(), credentialProvider);
+        ec2Provisioner.killInstances(ids);
     }
 
 }

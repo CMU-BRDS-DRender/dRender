@@ -8,7 +8,7 @@ import java.util.List;
 
 public interface MachineProvider<T extends RequestProperty> {
 
-    List<DRenderInstance> startMachines(T property);
+    List<DRenderInstance> startMachines(T property, int count);
     String machineStatus(DRenderInstance instance);
-    boolean killMachine(DRenderInstance instance);
+    void killMachines(T property, List<String> ids);
 }
