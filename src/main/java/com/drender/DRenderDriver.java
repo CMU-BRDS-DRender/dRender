@@ -34,6 +34,7 @@ public class DRenderDriver extends AbstractVerticle {
 
     private final int FRAMES_PER_MACHINE = 50;
     private final int HEARTBEAT_TIMER = 15 * 1000; // 15 seconds
+    private final long MAX_WORKER_TIME = 6* 60 * 1000 * 1000000L;
     public static MessageQ MESSAGE_Q;
 
     private DRenderDriverModel dRenderDriverModel;
@@ -51,7 +52,8 @@ public class DRenderDriver extends AbstractVerticle {
 
         // Deploy all the verticles
         vertx.deployVerticle(new HeartbeatVerticle());
-        vertx.deployVerticle(new ResourceManager(), new DeploymentOptions().setMaxWorkerExecuteTime(6* 60L * 1000 * 1000000));
+        vertx.deployVerticle(new ResourceManager(),
+                            new DeploymentOptions().setMaxWorkerExecuteTime(MAX_WORKER_TIME));
         vertx.deployVerticle(new JobManager());
 
         // setup listeners for dRender Driver
