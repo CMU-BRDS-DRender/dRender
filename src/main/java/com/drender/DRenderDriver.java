@@ -32,10 +32,11 @@ import java.util.stream.Collectors;
 
 public class DRenderDriver extends AbstractVerticle {
 
-    private final int FRAMES_PER_MACHINE = 50;
     private final int HEARTBEAT_TIMER = 15 * 1000; // 15 seconds
-    private final int PROJECT_STATUS_TIMER = 10 * 1000; // 10 seconds
+    private final int INSTANCE_JOB_TIMER = 10 * 1000; // 10 seconds
     private final long MAX_WORKER_TIME = 8* 60 * 1000 * 1000000L; // 8 minutes
+    private final long TIMEOUT_MS = 8 * 60 * 1000; // 8 minutes (in ms);
+
     public static MessageQ MESSAGE_Q;
 
     private DRenderDriverModel dRenderDriverModel;
@@ -99,7 +100,7 @@ public class DRenderDriver extends AbstractVerticle {
                     switch (instance.getAction()) {
                         case START_NEW_MACHINE:
                             // TODO: Add machine to queue and call handleNewMachineStart
-                            //handleNewMachineStart(instance);
+                            handleNewMachineStart(instance);
                             break;
                         case RESTART_MACHINE:
                         case KILL_MACHINE:
@@ -128,6 +129,7 @@ public class DRenderDriver extends AbstractVerticle {
         RabbitMQClient client = RabbitMQClient.create(vertx, config);
         client.start(ar -> {
             if (ar.succeeded()) {
+                // Forwards messages from this queue to DRIVER_FRAMES channel
                 client.basicConsume(DRenderDriver.MESSAGE_Q.getQueue(), Channels.DRIVER_FRAMES, consumeResult -> {
                     if (consumeResult.succeeded()) {
                         logger.info("RabbitMQ consumer created!");
@@ -193,6 +195,7 @@ public class DRenderDriver extends AbstractVerticle {
                             scheduleHeartbeat(instance);
                         }
 
+                        // Schedule checks for jobs running in instances
                         scheduleCompletionCheck(project.getID());
 
                         projectResponseFuture.complete(buildStatus(project));
@@ -217,6 +220,7 @@ public class DRenderDriver extends AbstractVerticle {
                             .source(projectRequest.getSource())
                             .startFrame(projectRequest.getStartFrame())
                             .endFrame(projectRequest.getEndFrame())
+                            .framesPerMachine(projectRequest.getFramesPerMachine())
                             .software(projectRequest.getSoftware())
                             .source(projectRequest.getSource())
                             .build();
@@ -251,7 +255,6 @@ public class DRenderDriver extends AbstractVerticle {
             );
         }
         log.put("jobs", jobLogs);
-        log.put("message", "Jobs are running");
         return log;
     }
 
@@ -264,11 +267,12 @@ public class DRenderDriver extends AbstractVerticle {
      */
     private List<Job> prepareJobs(Project project) {
         int currentFrame = project.getStartFrame();
+        int framesPerMachine = project.getFramesPerMachine();
         List<Job> jobs = new ArrayList<>();
 
         while (currentFrame < project.getEndFrame()) {
             int startFrame = currentFrame;
-            int endFrame = (project.getEndFrame() - currentFrame) >= FRAMES_PER_MACHINE ? (currentFrame+FRAMES_PER_MACHINE-1) : project.getEndFrame();
+            int endFrame = (project.getEndFrame() - currentFrame) >= framesPerMachine ? (currentFrame+framesPerMachine-1) : project.getEndFrame();
 
             Job job = Job.builder()
                         .startFrame(startFrame)
@@ -302,9 +306,8 @@ public class DRenderDriver extends AbstractVerticle {
         InstanceRequest instanceRequest = new InstanceRequest(DRenderInstanceAction.START_NEW_MACHINE, request);
 
         final Future<List<DRenderInstance>> ips = Future.future();
-        final long TIMEOUT = 8 * 60 * 1000; // 8 minutes (in ms)
 
-        eventBus.send(Channels.INSTANCE_MANAGER, Json.encode(instanceRequest), new DeliveryOptions().setSendTimeout(TIMEOUT),
+        eventBus.send(Channels.INSTANCE_MANAGER, Json.encode(instanceRequest), new DeliveryOptions().setSendTimeout(TIMEOUT_MS),
             ar -> {
                 if (ar.succeeded()) {
                     InstanceResponse response = Json.decodeValue(ar.result().body().toString(), InstanceResponse.class);
@@ -391,40 +394,39 @@ public class DRenderDriver extends AbstractVerticle {
     }
 
     /**
-     * Schedules checks the current status of the project.
-     * Does not actively check each time a frame is rendered, rather checks every PROJECT_STATUS_TIMER seconds
-     * If the project is complete, then it terminates all the instances
-     * @param projectID
+     * Schedules checks to find instances who have finished rendering their jobs.
+     * If it finds such instances, it terminates them.
      */
-    private void scheduleCompletionCheck(String projectID) {
-        long timerId = vertx.setPeriodic(PROJECT_STATUS_TIMER, id -> {
-            boolean status = dRenderDriverModel.isProjectComplete(projectID);
-            if (status) {
-                logger.info("Project \"" + projectID + "\" status: Complete");
+    private void scheduleCompletionCheck(String projectId) {
+        long timerId = vertx.setPeriodic(INSTANCE_JOB_TIMER, id -> {
+            List<String> instanceIds = dRenderDriverModel.getInstancesWithCompletedJobs(projectId);
+            List<String> newInstanceIds = dRenderDriverModel.queueInstancesForTermination(instanceIds);
 
-                vertx.cancelTimer(id);
+            if (newInstanceIds.size() > 0) {
+                logger.info("Jobs finished running on instances: " + newInstanceIds + " . Terminating.");
 
-                terminateProjectInstances(projectID);
-                dRenderDriverModel.getAllJobIds(projectID)
-                        .forEach(jobId -> dRenderDriverModel.updateJobActiveState(jobId, false));
-            } else {
-                logger.info("Project \"" + projectID + "\" status: Incomplete");
+                terminateInstances(newInstanceIds)
+                        .setHandler(ar -> {
+                            if (ar.succeeded()) {
+                                logger.info("Terminated instances for completed jobs. Instance Ids: " + newInstanceIds);
+                                newInstanceIds.forEach(instanceId -> dRenderDriverModel.removeInstance(instanceId));
+                            } else {
+                                logger.error("Could not terminate instances for completed jobs: " + ar.cause());
+                            }
+                        });
             }
         });
     }
 
     /**
-     * Terminates all the instances for this project
-     * @param projectID
+     * Terminates the given list of instances:
+     * - Removes heartbeat checks for the instances
+     * - Sends termination request to ResourceManager. Reports back when successful
+     * @param instanceIds
      * @return
      */
-    private Future<Void> terminateProjectInstances(String projectID) {
+    private Future<Void> terminateInstances(List<String> instanceIds) {
         Future<Void> future = Future.future();
-
-        List<String> instanceIds = dRenderDriverModel.getInstances(projectID)
-                .stream()
-                .map(DRenderInstance::getID)
-                .collect(Collectors.toList());
 
         // Remove timers
         instanceIds.forEach(this::removeHeartbeat);
@@ -434,13 +436,15 @@ public class DRenderDriver extends AbstractVerticle {
         InstanceRequest request = new InstanceRequest(DRenderInstanceAction.KILL_MACHINE, instanceArray);
 
         EventBus eventBus = vertx.eventBus();
-        eventBus.send(Channels.INSTANCE_MANAGER, Json.encode(request), ar -> {
-            if (ar.succeeded()) {
-                future.complete();
-            } else {
-                future.fail("Could not terminate instances: " + ar.cause());
+        eventBus.send(Channels.INSTANCE_MANAGER, Json.encode(request), new DeliveryOptions().setSendTimeout(TIMEOUT_MS),
+            ar -> {
+                if (ar.succeeded()) {
+                    future.complete();
+                } else {
+                    future.fail("Could not terminate instances: " + ar.cause());
+                }
             }
-        });
+        );
 
         return future;
     }
@@ -494,13 +498,22 @@ public class DRenderDriver extends AbstractVerticle {
      * 2. Updates internal data structures to reflect the new jobMap
      * 3. Since the current job (and hence, its instance) is no longer valid, the associated heartbeat
      *    checks are also disabled.
+     *    - Also updates the failed job's endFrame to reflect the number of frames it rendered.
      * @param instanceHeartbeat
      */
     private void handleNewMachineStart(InstanceHeartbeat instanceHeartbeat) {
-        List<Job> instanceJobs = dRenderDriverModel.getAllJobs(instanceHeartbeat.getInstance());
+        List<Job> instanceJobs = dRenderDriverModel.getActiveJobs(instanceHeartbeat.getInstance());
+
+        instanceJobs.forEach(job -> {
+            logger.info("HandleNewMachineStart: Current job frame state: " + dRenderDriverModel.getRenderedFramesForJob(job.getID()));
+        });
 
         // deactivate old jobs
         instanceJobs.forEach(job -> dRenderDriverModel.updateJobActiveState(job.getID(), false));
+
+        // Remove timer for old instance
+        removeHeartbeat(instanceHeartbeat.getInstance().getID());
+        dRenderDriverModel.removeInstance(instanceHeartbeat.getInstance().getID());
 
         List<Job> newJobs = instanceJobs.stream()
                                 .map(this::prepareNewJobs)
@@ -510,23 +523,24 @@ public class DRenderDriver extends AbstractVerticle {
         if (newJobs.size() > 0) {
             String projectID = newJobs.get(0).getProjectID();
             String software = dRenderDriverModel.getProject(projectID).getSoftware();
+
+            logger.info("Spawning new instance for jobs: " + newJobs);
             spawnMachines(ImageFactory.getJobImageAMI(software), 1)
                     .setHandler(ar -> {
                         if (ar.succeeded()) {
                             DRenderInstance instance = ar.result().get(0);
+
                             // Assign newly created jobs
-                            // Schedule heartbeat
                             newJobs.forEach(job -> job.setInstance(instance));
                             dRenderDriverModel.addNewJobs(newJobs, projectID);
+
+                            // Start jobs
+                            newJobs.forEach(this::startJob);
 
                             scheduleHeartbeat(instance);
                         }
                     });
         }
-
-        // Remove timer for old instance
-        removeHeartbeat(instanceHeartbeat.getInstance().getID());
-        dRenderDriverModel.removeInstance(instanceHeartbeat.getInstance());
     }
 
     private List<Job> prepareNewJobs(Job job) {
@@ -539,7 +553,7 @@ public class DRenderDriver extends AbstractVerticle {
         List<Job> newJobs = new ArrayList<>();
 
         int prevFrame = startFrame-1;
-        for (int i = 1; i < frames.size(); i++) {
+        for (int i = 0; i < frames.size(); i++) {
             if (frames.get(i) != prevFrame+1) {
                 newJobs.add(
                   Job.builder()
@@ -569,6 +583,11 @@ public class DRenderDriver extends AbstractVerticle {
         return newJobs;
     }
 
+    /**
+     * Reads the frame and checks if the frame has actually been rendered and stored in S3.
+     * If yes, then updates the current frame rendered state.
+     * @param jobFrame
+     */
     private void handleFrameRenderedMessage(JobFrame jobFrame) {
         checkSource(jobFrame.getOutputURI())
                 .setHandler(ar -> {

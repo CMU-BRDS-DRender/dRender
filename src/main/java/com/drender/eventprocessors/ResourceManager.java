@@ -32,11 +32,16 @@ public class ResourceManager extends AbstractVerticle {
     private final String SUFFIX = "/";
     private final String OUTPUT_FOLDER = "output";
 
+    // Tasks are executed in this resource pool, with max execute time set when this verticle is created
+    private WorkerExecutor executor;
+
     private Logger logger = LoggerFactory.getLogger(ResourceManager.class);
 
     @Override
     public void start() throws Exception {
         logger.info("Starting...");
+
+        executor = vertx.createSharedWorkerExecutor("resource-worker-pool", 10);
 
         EventBus eventBus = vertx.eventBus();
         eventBus.consumer(Channels.INSTANCE_MANAGER)
@@ -45,7 +50,7 @@ public class ResourceManager extends AbstractVerticle {
                         JsonObject request = instanceRequest.getRequest();
                         switch (instanceRequest.getAction()) {
                             case START_NEW_MACHINE:
-                                vertx.executeBlocking(future -> {
+                                executor.executeBlocking(future -> {
                                     logger.info("Received new instance request: " + message.body().toString());
 
                                     List<DRenderInstance> instances = getNewInstances(request.getString("cloudAMI"),
@@ -56,7 +61,7 @@ public class ResourceManager extends AbstractVerticle {
                                     // Need to reply here rather than the callback since the result of this event becomes false (not succeeded)
                                     InstanceResponse response = new InstanceResponse("success", instances);
                                     message.reply(Json.encode(response));
-                                }, result -> {
+                                }, false, result -> {
                                     // Do nothing
                                 });
                                 break;
@@ -68,14 +73,14 @@ public class ResourceManager extends AbstractVerticle {
                                                                 .stream()
                                                                 .map(Object::toString)
                                                                 .collect(Collectors.toList());
-                                vertx.executeBlocking(future -> {
+                                executor.executeBlocking(future -> {
                                     logger.info("Received instance termination request: " + instanceIds);
                                     killInstances(instanceIds);
                                     future.complete();
 
                                     InstanceResponse response = InstanceResponse.builder().message("success").build();
                                     message.reply(Json.encode(response));
-                                }, result -> {
+                                }, false, result -> {
 
                                 });
                         }

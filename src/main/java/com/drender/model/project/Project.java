@@ -15,5 +15,6 @@ public class Project {
     private S3Source source;
     private int startFrame;
     private int endFrame;
+    private int framesPerMachine;
     private S3Source outputURI;
 }

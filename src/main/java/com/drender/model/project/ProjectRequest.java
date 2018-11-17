@@ -16,6 +16,7 @@ public class ProjectRequest {
     private S3Source source;
     private int startFrame;
     private int endFrame;
+    private int framesPerMachine;
 
     // Master node's IP, to be used for connecting to RabbitMQ. Sort of a hack.
     private String publicIP;

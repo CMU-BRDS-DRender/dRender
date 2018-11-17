@@ -23,26 +23,34 @@ public class DRenderDriverModel {
     private Map<String, Job> jobMap;
     // Stores projectID -> [jobID] mapping
     private Map<String, List<String>> projectJobs;
+    // Stores instanceID -> DRenderInstance mapping
+    private Map<String, DRenderInstance> instanceMap;
     // Stores instanceID -> [jobIDs] mapping
-    private Map<DRenderInstance, List<String>> instanceJobs;
+    private Map<String, List<String>> instanceJobs;
     // Stores instanceID -> heartbeatTimerID mapping
     private Map<String, Long> instanceTimers;
     // Stores jobID -> [frameSet] mapping
     private Map<String, Set<Integer>> jobFrames;
 
+    private Set<String> instanceTerminationList;
+
     public DRenderDriverModel() {
         projectMap = new HashMap<>();
         jobMap = new HashMap<>();
         projectJobs = new HashMap<>();
+        instanceMap = new HashMap<>();
         instanceJobs = new HashMap<>();
         instanceTimers = new HashMap<>();
         jobFrames = new HashMap<>();
+
+        instanceTerminationList = new HashSet<>();
     }
 
     /**
      * Checks if project is complete.
-     * Calculates the total frames to be rendered, and then checks if all
-     * the frames are rendered or not.
+     * Can't simply check if a project is complete by checking if its corresponding jobs are complete.
+     * A job may terminate for some reason and its pending frames will be scheduled in some other job.
+     * So, each frame needs to be verified.
      * @param projectID
      * @return
      */
@@ -72,13 +80,6 @@ public class DRenderDriverModel {
                 .collect(Collectors.toList());
     }
 
-    public List<Job> getAllJobs(DRenderInstance instance) {
-        return instanceJobs.getOrDefault(instance, new ArrayList<>())
-                .stream()
-                .map(jobID -> jobMap.get(jobID))
-                .collect(Collectors.toList());
-    }
-
     public List<String> getAllJobIds(String projectID) {
         return projectJobs.getOrDefault(projectID, new ArrayList<>())
                 .stream()
@@ -90,6 +91,14 @@ public class DRenderDriverModel {
         return projectJobs.getOrDefault(projectID, new ArrayList<>())
                 .stream()
                 .map(id -> jobMap.get(id))
+                .filter(Job::isActive)
+                .collect(Collectors.toList());
+    }
+
+    public List<Job> getActiveJobs(DRenderInstance instance) {
+        return instanceJobs.getOrDefault(instance.getID(), new ArrayList<>())
+                .stream()
+                .map(jobID -> jobMap.get(jobID))
                 .filter(Job::isActive)
                 .collect(Collectors.toList());
     }
@@ -130,7 +139,23 @@ public class DRenderDriverModel {
         return projectJobs.getOrDefault(projectId, new ArrayList<>())
                 .stream()
                 .map(jobId -> jobMap.get(jobId).getInstance())
-                .distinct()// an instance could be running multiple jobs
+                .filter(instance -> instanceMap.containsKey(instance.getID()))
+                .distinct() // an instance could be running multiple jobs
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Returns the currently active instances for this project.
+     * Already terminated instances will be ignored
+     * @param projectId
+     * @return
+     */
+    public List<String> getInstanceIds(String projectId) {
+        return projectJobs.getOrDefault(projectId, new ArrayList<>())
+                .stream()
+                .map(jobId -> jobMap.get(jobId).getInstance().getID())
+                .filter(instanceId -> instanceMap.containsKey(instanceId))
+                .distinct() // an instance could be running multiple jobs
                 .collect(Collectors.toList());
     }
 
@@ -141,10 +166,14 @@ public class DRenderDriverModel {
                     .collect(groupingBy(Job::getInstance, mapping(Job::getID, toList())));
 
         // merge these new jobs with existing instance information
-        instanceJobIds.forEach((key, value) -> instanceJobs.merge(key, value,
+        instanceJobIds.forEach((key, value) -> {
+            instanceMap.putIfAbsent(key.getID(), key);
+
+            instanceJobs.merge(key.getID(), value,
                 (oldList, newList) -> Stream.of(oldList, newList)
                                         .flatMap(Collection::stream)
-                                        .collect(Collectors.toList())));
+                                        .collect(Collectors.toList()));
+        });
     }
 
     public Set<Integer> getRenderedFramesForJob(String jobID) {
@@ -157,7 +186,10 @@ public class DRenderDriverModel {
 
     public Job updateJobInstance(String jobID, DRenderInstance instance) {
         jobMap.get(jobID).setInstance(instance);
-        instanceJobs.merge(instance, Collections.singletonList(jobID),
+
+        instanceMap.putIfAbsent(instance.getID(), instance);
+
+        instanceJobs.merge(instance.getID(), Collections.singletonList(jobID),
                 (oldList, newList) -> Stream.of(oldList, newList)
                                             .flatMap(Collection::stream)
                                             .distinct()
@@ -189,15 +221,84 @@ public class DRenderDriverModel {
         return projectMap.get(projectID);
     }
 
-    public void removeInstance(DRenderInstance instance) {
-        instanceJobs.remove(instance);
-        instanceTimers.remove(instance.getID());
+    public void removeInstance(String instanceId) {
+        instanceMap.remove(instanceId);
+        instanceJobs.remove(instanceId);
+        instanceTimers.remove(instanceId);
+
+        instanceTerminationList.remove(instanceId);
     }
 
+    /**
+     * Adds the instances to the list of instances to be deleted or being currently deleted.
+     * @param instanceIds
+     * @return The difference between the current set of instances and the new set
+     */
+    public List<String> queueInstancesForTermination(List<String> instanceIds) {
+        List<String> newInstances =
+                    instanceIds
+                        .stream()
+                        .filter(instanceId -> !instanceTerminationList.contains(instanceId))
+                        .collect(Collectors.toList());
+
+        instanceTerminationList.addAll(newInstances);
+
+        return newInstances;
+    }
+
+    /**
+     * Adds the frame to the set of frames for the job.
+     * If all the frames are rendered, the job state is set to inactive.
+     * Calls
+     * @param jobID
+     * @param frame
+     */
     public void updateJobFrames(String jobID, int frame) {
         jobFrames.merge(jobID, Collections.singleton(frame),
                 (oldSet, newSet) -> Stream.of(oldSet, newSet)
                                         .flatMap(Collection::stream)
                                         .collect(Collectors.toSet()));
+
+        if (isJobComplete(jobID)) {
+            updateJobActiveState(jobID, false);
+        }
+    }
+
+    /**
+     * Checks if job is complete.
+     * Verifies if all the frames for this job are rendered.
+     * @param jobId
+     * @return
+     */
+    public boolean isJobComplete(String jobId) {
+        Job job = jobMap.get(jobId);
+        int[] frames = new int[job.getEndFrame() - job.getStartFrame() + 1];
+        jobFrames.getOrDefault(jobId, new HashSet<>())
+                .forEach(f -> frames[f-job.getStartFrame()] = -1);
+
+        return Arrays.stream(frames).allMatch(f -> f == -1);
+    }
+
+    /**
+     * Finds instances in which all jobs have been rendered
+     * @return instanceIDs of matching instances
+     */
+    public List<String> getInstancesWithCompletedJobs(String projectId) {
+        return getInstanceIds(projectId)
+                .stream()
+                .filter(this::isInstanceJobsComplete)
+                .map(instanceId -> instanceMap.get(instanceId).getID())
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Checks if the jobs running in this instance are complete
+     * @param instanceID
+     * @return
+     */
+    public boolean isInstanceJobsComplete(String instanceID) {
+        return instanceJobs.getOrDefault(instanceID, new ArrayList<>())
+                .stream()
+                .noneMatch(jobId -> jobMap.get(jobId).isActive());
     }
 }
