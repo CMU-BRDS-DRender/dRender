@@ -5,8 +5,8 @@ import com.amazonaws.auth.*;
 import com.drender.cloud.MachineProvider;
 import com.drender.model.cloud.AWSRequestProperty;
 import com.drender.model.instance.DRenderInstance;
+import com.drender.model.instance.VerifyRequest;
 import io.vertx.core.Future;
-import io.vertx.core.Vertx;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -64,6 +64,12 @@ public class AWSProvider implements MachineProvider<AWSRequestProperty>{
     public void killMachines(AWSRequestProperty property, List<String> ids) {
         ec2Provisioner = new EC2Provisioner(property.getRegion(), credentialProvider);
         ec2Provisioner.killInstances(ids);
+    }
+
+    @Override
+    public Future<Void> restartMachines(AWSRequestProperty property, List<String> ids, VerifyRequest verifyRequest) {
+        ec2Provisioner = new EC2Provisioner(property.getRegion(), credentialProvider);
+        return ec2Provisioner.restartInstances(ids, verifyRequest);
     }
 
 }

@@ -10,6 +10,8 @@ import com.drender.model.cloud.S3Source;
 import com.drender.model.instance.DRenderInstance;
 import com.drender.model.instance.InstanceResponse;
 import com.drender.model.instance.InstanceRequest;
+import com.drender.model.instance.VerifyRequest;
+import com.drender.model.job.JobResponse;
 import io.vertx.core.*;
 import io.vertx.core.eventbus.EventBus;
 import io.vertx.core.json.Json;
@@ -49,12 +51,12 @@ public class ResourceManager extends AbstractVerticle {
                         InstanceRequest instanceRequest = Json.decodeValue(message.body().toString(), InstanceRequest.class);
                         JsonObject request = instanceRequest.getRequest();
                         switch (instanceRequest.getAction()) {
-                            case START_NEW_MACHINE:
+                            case START_NEW_MACHINE: {
                                 executor.executeBlocking(future -> {
                                     logger.info("Received new instance request: " + message.body().toString());
 
                                     List<DRenderInstance> instances = getNewInstances(request.getString("cloudAMI"),
-                                                                                      request.getInteger("count"));
+                                            request.getInteger("count"));
 
                                     future.complete(instances);
 
@@ -65,9 +67,31 @@ public class ResourceManager extends AbstractVerticle {
                                     // Do nothing
                                 });
                                 break;
+                            }
 
-                            case RESTART_MACHINE:
-                            case KILL_MACHINE:
+                            case RESTART_MACHINE: {
+                                JsonArray instances = request.getJsonArray("instances");
+                                List<String> instanceIds = instances
+                                                                .stream()
+                                                                .map(Object::toString)
+                                                                .collect(Collectors.toList());
+
+                                logger.info("Received instance restart request: " + instanceIds);
+                                restartInstances(instanceIds)
+                                        .setHandler(ar -> {
+                                            if (ar.succeeded()) {
+                                                InstanceResponse response = InstanceResponse.builder().message("success").build();
+                                                message.reply(Json.encode(response));
+                                            } else {
+                                                InstanceResponse response = InstanceResponse.builder().message("failed").build();
+                                                message.fail(400, Json.encode(response));
+                                            }
+                                        });
+                                break;
+                            }
+
+
+                            case KILL_MACHINE: {
                                 JsonArray instances = request.getJsonArray("instances");
                                 List<String> instanceIds = instances
                                                                 .stream()
@@ -83,6 +107,7 @@ public class ResourceManager extends AbstractVerticle {
                                 }, false, result -> {
 
                                 });
+                            }
                         }
                 });
 
@@ -122,5 +147,15 @@ public class ResourceManager extends AbstractVerticle {
         AWSRequestProperty awsRequestProperty = new AWSRequestProperty(sshKeyName, securityGroupName, region);
 
         machineProvider.killMachines(awsRequestProperty, instanceIds);
+    }
+
+    private Future<Void> restartInstances(List<String> instancesIds) {
+        String region = "us-east-1a";
+        String securityGroupName = "HTTP Open";
+        String sshKeyName = "drender";
+        AWSRequestProperty awsRequestProperty = new AWSRequestProperty(sshKeyName, securityGroupName, region);
+
+        VerifyRequest verifyRequest = new VerifyRequest("/nodeStatus", 8080);
+        return machineProvider.restartMachines(awsRequestProperty, instancesIds, verifyRequest);
     }
 }

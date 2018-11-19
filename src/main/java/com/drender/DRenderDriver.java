@@ -27,6 +27,7 @@ import io.vertx.rabbitmq.RabbitMQOptions;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -35,7 +36,8 @@ public class DRenderDriver extends AbstractVerticle {
     private final int HEARTBEAT_TIMER = 15 * 1000; // 15 seconds
     private final int INSTANCE_JOB_TIMER = 10 * 1000; // 10 seconds
     private final long MAX_WORKER_TIME = 8* 60 * 1000 * 1000000L; // 8 minutes
-    private final long TIMEOUT_MS = 8 * 60 * 1000; // 8 minutes (in ms);
+    private final long TIMEOUT_MS = 8 * 60 * 1000; // 8 minutes (in ms)
+    private final long RESTART_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes (in ms)
 
     public static MessageQ MESSAGE_Q;
 
@@ -99,10 +101,15 @@ public class DRenderDriver extends AbstractVerticle {
                     InstanceHeartbeat instance = Json.decodeValue(message.body().toString(), InstanceHeartbeat.class);
                     switch (instance.getAction()) {
                         case START_NEW_MACHINE:
-                            // TODO: Add machine to queue and call handleNewMachineStart
-                            handleNewMachineStart(instance);
+                            if (dRenderDriverModel.queueInstanceForNewSpawn(instance.getInstance().getID())) {
+                                handleNewMachineStart(instance);
+                            }
                             break;
                         case RESTART_MACHINE:
+                            if (dRenderDriverModel.queueInstanceForRestart(instance.getInstance().getID())) {
+                                handleMachineRestart(instance);
+                            }
+                            break;
                         case KILL_MACHINE:
                         default:
                     }
@@ -321,6 +328,28 @@ public class DRenderDriver extends AbstractVerticle {
         return ips;
     }
 
+    private Future<Void> restartMachine(DRenderInstance instance) {
+        EventBus eventBus = vertx.eventBus();
+
+        JsonObject instanceArray = new JsonObject().put("instances", new JsonArray(Collections.singletonList(instance.getID())));
+        InstanceRequest request = new InstanceRequest(DRenderInstanceAction.RESTART_MACHINE, instanceArray);
+
+        final Future<Void> future = Future.future();
+
+        eventBus.send(Channels.INSTANCE_MANAGER, Json.encode(request), new DeliveryOptions().setSendTimeout(RESTART_TIMEOUT_MS),
+            ar -> {
+                if (ar.succeeded()) {
+                    InstanceResponse response = Json.decodeValue(ar.result().body().toString(), InstanceResponse.class);
+                    future.complete();
+                } else {
+                    logger.error("Could not restart machine: " + ar.cause());
+                }
+            }
+        );
+
+        return future;
+    }
+
     /**
      * Asynchronously creates a bucket in S3 for the project.
      * @param project
@@ -502,23 +531,7 @@ public class DRenderDriver extends AbstractVerticle {
      * @param instanceHeartbeat
      */
     private void handleNewMachineStart(InstanceHeartbeat instanceHeartbeat) {
-        List<Job> instanceJobs = dRenderDriverModel.getActiveJobs(instanceHeartbeat.getInstance());
-
-        instanceJobs.forEach(job -> {
-            logger.info("HandleNewMachineStart: Current job frame state: " + dRenderDriverModel.getRenderedFramesForJob(job.getID()));
-        });
-
-        // deactivate old jobs
-        instanceJobs.forEach(job -> dRenderDriverModel.updateJobActiveState(job.getID(), false));
-
-        // Remove timer for old instance
-        removeHeartbeat(instanceHeartbeat.getInstance().getID());
-        dRenderDriverModel.removeInstance(instanceHeartbeat.getInstance().getID());
-
-        List<Job> newJobs = instanceJobs.stream()
-                                .map(this::prepareNewJobs)
-                                .flatMap(Collection::stream)
-                                .collect(Collectors.toList());
+        List<Job> newJobs = transitionJobs(instanceHeartbeat.getInstance());
 
         if (newJobs.size() > 0) {
             String projectID = newJobs.get(0).getProjectID();
@@ -538,6 +551,8 @@ public class DRenderDriver extends AbstractVerticle {
                             newJobs.forEach(this::startJob);
 
                             scheduleHeartbeat(instance);
+
+                            dRenderDriverModel.removeInstanceFromNewSpawnQueue(instance.getID());
                         }
                     });
         }
@@ -581,6 +596,71 @@ public class DRenderDriver extends AbstractVerticle {
         }
 
         return newJobs;
+    }
+
+    /**
+     * Restarts the given machine.
+     * 1. Determines the number of frames to allocate for this job (some frames might already be rendered).
+     *    - Might have to split into multiple jobMap if frames are not contiguous (will send it to the same machine).
+     * 2. Updates internal data structures to reflect the new jobMap
+     * 3. Temporarily disables the heartbeat check for the machine while it restarts
+     * 4. Once machine starts, assigns jobs, starts them, and sets the heartbeat check again.
+     * @param instanceHeartbeat
+     */
+    private void handleMachineRestart(InstanceHeartbeat instanceHeartbeat) {
+        List<Job> newJobs = transitionJobs(instanceHeartbeat.getInstance());
+        DRenderInstance instance = instanceHeartbeat.getInstance();
+
+        if (newJobs.size() > 0) {
+            String projectID = newJobs.get(0).getProjectID();
+            String software = dRenderDriverModel.getProject(projectID).getSoftware();
+
+            logger.info("Restarting the instance: " + instanceHeartbeat.getInstance());
+            restartMachine(instance)
+                    .setHandler(ar -> {
+                        if (ar.succeeded()) {
+
+                            // Assign newly created jobs
+                            newJobs.forEach(job -> job.setInstance(instance));
+                            dRenderDriverModel.addNewJobs(newJobs, projectID);
+
+                            // Start jobs
+                            newJobs.forEach(this::startJob);
+
+                            scheduleHeartbeat(instance);
+
+                            dRenderDriverModel.removeInstanceFromRestartQueue(instance.getID());
+                        }
+                    });
+        }
+    }
+
+    /**
+     * Transitions current set of jobs for the instance to be scheduled on a new instance.
+     * Used when restarting a machine or assigning jobs from one machine to another machine.
+     * @param instance
+     * @return List of new valid jobs for the given instance
+     */
+    private List<Job> transitionJobs(DRenderInstance instance) {
+        List<Job> instanceJobs = dRenderDriverModel.getActiveJobs(instance);
+
+        instanceJobs.forEach(job -> {
+            logger.info("TransitionJob: Current job frame state: " + dRenderDriverModel.getRenderedFramesForJob(job.getID()));
+        });
+
+        // deactivate old jobs
+        instanceJobs.forEach(job -> dRenderDriverModel.updateJobActiveState(job.getID(), false));
+
+        // Remove timer for old instance
+        removeHeartbeat(instance.getID());
+        dRenderDriverModel.removeInstance(instance.getID());
+
+        // Prepare new jobs and return
+        return instanceJobs.stream()
+                .map(this::prepareNewJobs)
+                .flatMap(Collection::stream)
+                .collect(Collectors.toList());
+
     }
 
     /**

@@ -8,19 +8,26 @@ import com.amazonaws.waiters.Waiter;
 import com.amazonaws.waiters.WaiterHandler;
 import com.amazonaws.waiters.WaiterParameters;
 import com.drender.model.instance.DRenderInstance;
+import com.drender.model.instance.VerifyRequest;
+import com.drender.model.job.JobResponse;
+import com.drender.utils.HttpUtils;
+import io.vertx.core.CompositeFuture;
+import io.vertx.core.Future;
+import io.vertx.core.Vertx;
+import io.vertx.core.json.JsonObject;
 import io.vertx.core.logging.Logger;
 import io.vertx.core.logging.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.Future;
 import java.util.stream.Collectors;
 
 public class EC2Provisioner {
 
     private static AmazonEC2 ec2Client = null;
     private Logger logger = LoggerFactory.getLogger(EC2Provisioner.class);
+    private final long VERIFY_TIMEOUT = 5 * 60 * 1000; // 5 mins
 
     private final String S3_FULL_ACCESS_ARN = "arn:aws:iam::214187139358:instance-profile/S3FullAccess";
 
@@ -105,6 +112,64 @@ public class EC2Provisioner {
         ec2Client.waiters().instanceTerminated().run(new WaiterParameters<DescribeInstancesRequest>().withRequest(waitRequest));
 
         logger.info("Killed EC2 instances: " + instanceIds);
+    }
+
+    public Future<Void> restartInstances(List<String> instanceIds, VerifyRequest verifyRequest) {
+        RebootInstancesRequest rebootInstancesRequest = new RebootInstancesRequest();
+
+        rebootInstancesRequest.withInstanceIds(instanceIds);
+        RebootInstancesResult result = ec2Client.rebootInstances(rebootInstancesRequest);
+
+        List<String> ips =
+                ec2Client.describeInstances(new DescribeInstancesRequest()
+                        .withInstanceIds(instanceIds))
+                        .getReservations()
+                        .stream()
+                        .map(Reservation::getInstances)
+                        .flatMap(List::stream)
+                        .map(Instance::getPublicIpAddress)
+                        .collect(Collectors.toList());
+
+        List<Future> verifyFutures =
+                ips.stream().map(ip -> verifyInstance(ip, verifyRequest)).collect(Collectors.toList());
+
+        Future<Void> future = Future.future();
+
+        CompositeFuture.all(verifyFutures)
+                .setHandler(ar -> {
+                    if (ar.succeeded()) {
+                        logger.info("Rebooted EC2 instances: " + instanceIds);
+                        future.complete();
+                    } else {
+                        future.fail("Could not reboot EC2 instances: " + instanceIds + ": " + ar.cause());
+                    }
+                });
+
+        return future;
+    }
+
+    Future<Boolean> verifyInstance(String ip, VerifyRequest verifyRequest) {
+        long startTime = System.currentTimeMillis();
+
+        Vertx vertx = Vertx.currentContext().owner();
+        HttpUtils httpUtils = new HttpUtils(vertx);
+
+        Future<Boolean> future = Future.future();
+        vertx.setPeriodic(15*1000, id -> {
+            logger.info("Verify restart instance triggered");
+            httpUtils.get(ip, verifyRequest.getUri(), verifyRequest.getPort())
+                    .setHandler(ar -> {
+                        if (ar.succeeded()) {
+                            future.complete(true);
+                            vertx.cancelTimer(id);
+                        } else if (System.currentTimeMillis() - startTime > VERIFY_TIMEOUT) {
+                            vertx.cancelTimer(id);
+                            future.fail("Time limit exceeded for verifying IP: " + ip);
+                        }
+                    });
+        });
+
+        return future;
     }
 
 }

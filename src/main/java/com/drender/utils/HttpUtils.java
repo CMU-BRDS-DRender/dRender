@@ -8,6 +8,7 @@ import io.vertx.core.logging.Logger;
 import io.vertx.core.logging.LoggerFactory;
 import io.vertx.ext.web.client.HttpResponse;
 import io.vertx.ext.web.client.WebClient;
+import io.vertx.ext.web.codec.BodyCodec;
 
 public class HttpUtils {
 
@@ -25,7 +26,7 @@ public class HttpUtils {
 
         client
             .get(port, domain, uri)
-            .timeout(5 * 1000) // 5 seconds
+            .timeout(10 * 1000) // 10 seconds
             .putHeader("content-type", "application/json")
             .send(ar -> {
                 if (ar.succeeded()) {
@@ -35,9 +36,34 @@ public class HttpUtils {
 
                     future.complete(responseObject);
                 } else {
+                    logger.error("GET Failed: " + ar.cause());
                     future.fail("GET Failed: " + ar.cause());
                 }
             });
+        return future;
+    }
+
+    public Future<Void> get(String domain, String uri, int port) {
+        final Future<Void> future = Future.future();
+
+        logger.info("GET Request: " + domain + ":" + port + uri);
+
+        client
+                .get(port, domain, uri)
+                .timeout(10 * 1000) // 10 seconds
+                .putHeader("content-type", "application/json")
+                .as(BodyCodec.none())
+                .send(ar -> {
+                    if (ar.succeeded()) {
+                        HttpResponse<Void> response = ar.result();
+                        logger.info("Received response: " + response.bodyAsString());
+
+                        future.complete();
+                    } else {
+                        logger.error("GET Failed: " + ar.cause());
+                        future.fail("GET Failed: " + ar.cause());
+                    }
+                });
         return future;
     }
 

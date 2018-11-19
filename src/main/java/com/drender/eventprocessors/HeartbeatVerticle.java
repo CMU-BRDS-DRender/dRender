@@ -13,12 +13,14 @@ import io.vertx.core.logging.LoggerFactory;
 
 import java.io.IOException;
 import java.net.InetAddress;
+import java.net.InetSocketAddress;
+import java.net.Socket;
 
 public class HeartbeatVerticle extends AbstractVerticle {
 
     private HttpUtils httpUtils;
     private Logger logger = LoggerFactory.getLogger(HeartbeatVerticle.class);
-    private final int TIMEOUT = 5000; // 5 secs
+    private final int TIMEOUT = 10000; // 10 secs
 
     @Override
     public void start() throws Exception {
@@ -36,21 +38,32 @@ public class HeartbeatVerticle extends AbstractVerticle {
                                 if (!ar.succeeded()) {
                                     logger.info("Heartbeat failed for: " + instanceHeartbeat.getInstance());
                                     DRenderInstanceAction nextAction = DRenderInstanceAction.START_NEW_MACHINE;
+
                                     // status check failed. Try pinging the machine
-                                    try {
-                                        InetAddress address = InetAddress.getByName(instanceHeartbeat.getInstance().getIp());
-                                        boolean reachable = address.isReachable(TIMEOUT);
-                                        if (reachable) nextAction = DRenderInstanceAction.RESTART_MACHINE;
-                                    } catch (IOException e) {
+                                    if (isReachable(instanceHeartbeat.getInstance().getIp())) {
+                                        logger.info("Machine " + instanceHeartbeat.getInstance().getIp() + " reachable");
+                                        nextAction = DRenderInstanceAction.RESTART_MACHINE;
+                                    } else {
                                         logger.info("Could not reach machine for instance: " + message.body().toString());
-                                    } finally {
-                                        // send appropriate message for job to DRenderDriver
-                                        logger.info("Sending action " + nextAction + " for Instance: " + instanceHeartbeat.getInstance());
-                                        instanceHeartbeat.setAction(nextAction);
-                                        eventBus.send(Channels.DRIVER_INSTANCE, Json.encode(instanceHeartbeat));
                                     }
+
+                                    // send appropriate message for job to DRenderDriver
+                                    logger.info("Sending action " + nextAction + " for Instance: " + instanceHeartbeat.getInstance());
+                                    instanceHeartbeat.setAction(nextAction);
+                                    eventBus.send(Channels.DRIVER_INSTANCE, Json.encode(instanceHeartbeat));
                                 }
                             });
                 });
+    }
+
+    private boolean isReachable(String address) {
+        try {
+            try (Socket soc = new Socket()) {
+                soc.connect(new InetSocketAddress(address, 22), TIMEOUT);
+            }
+            return true;
+        } catch (IOException ex) {
+            return false;
+        }
     }
 }

@@ -33,6 +33,10 @@ public class DRenderDriverModel {
     private Map<String, Set<Integer>> jobFrames;
 
     private Set<String> instanceTerminationList;
+    // Stores the list of instanceIds currently being restarted
+    private Set<String> instanceRestartList;
+    // Stores the list of instanceIds for whom corresponding new instances are being spawned
+    private Set<String> newInstanceList;
 
     public DRenderDriverModel() {
         projectMap = new HashMap<>();
@@ -44,6 +48,8 @@ public class DRenderDriverModel {
         jobFrames = new HashMap<>();
 
         instanceTerminationList = new HashSet<>();
+        instanceRestartList = new HashSet<>();
+        newInstanceList = new HashSet<>();
     }
 
     /**
@@ -300,5 +306,33 @@ public class DRenderDriverModel {
         return instanceJobs.getOrDefault(instanceID, new ArrayList<>())
                 .stream()
                 .noneMatch(jobId -> jobMap.get(jobId).isActive());
+    }
+
+    /**
+     * Tries to add the instance for restart operation.
+     * If already queued, then returns false
+     * @param instanceId
+     * @return true if the instance is not yet queued
+     */
+    public boolean queueInstanceForRestart(String instanceId) {
+        return instanceRestartList.add(instanceId);
+    }
+
+    public void removeInstanceFromRestartQueue(String instanceId) {
+        instanceRestartList.remove(instanceId);
+    }
+
+    /**
+     * Tries to queue the instance for which a new instance will be spawned.
+     * If already queued, then returns false
+     * @param instanceId
+     * @return true if the instance is not yet queued
+     */
+    public boolean queueInstanceForNewSpawn(String instanceId) {
+        return newInstanceList.add(instanceId);
+    }
+
+    public void removeInstanceFromNewSpawnQueue(String instanceId) {
+        newInstanceList.remove(instanceId);
     }
 }
