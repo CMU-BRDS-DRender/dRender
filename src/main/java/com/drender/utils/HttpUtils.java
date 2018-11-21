@@ -14,19 +14,20 @@ public class HttpUtils {
 
     private WebClient client;
     private Logger logger = LoggerFactory.getLogger(HttpUtils.class);
+    private final long GET_TIMEOUT = 10 * 1000; // 10 seconds (in ms)
 
     public HttpUtils(Vertx vertx) {
         this.client = WebClient.create(vertx);
     }
 
-    public <R> Future<R> get(String domain, String uri, int port, Class<R> clazz) {
+    public <R> Future<R> get(String domain, String uri, int port, Class<R> clazz, int retryCount) {
         final Future<R> future = Future.future();
 
         logger.info("GET Request: " + domain + ":" + port + uri);
 
         client
             .get(port, domain, uri)
-            .timeout(10 * 1000) // 10 seconds
+            .timeout(GET_TIMEOUT) // 10 seconds
             .putHeader("content-type", "application/json")
             .send(ar -> {
                 if (ar.succeeded()) {
@@ -37,9 +38,37 @@ public class HttpUtils {
                     future.complete(responseObject);
                 } else {
                     logger.error("GET Failed: " + ar.cause());
-                    future.fail("GET Failed: " + ar.cause());
+
+                    if (retryCount - 1 > 0) {
+                        get(domain, uri, port, clazz, retryCount-1)
+                            .setHandler(ar1 -> {
+                                if (ar1.succeeded()) {
+                                    future.complete(ar1.result());
+                                } else {
+                                    future.fail(ar1.cause());
+                                }
+                            });
+                    } else {
+                        future.fail(ar.cause());
+                    }
                 }
             });
+
+        return future;
+    }
+
+    public <R> Future<R> get(String domain, String uri, int port, Class<R> clazz) {
+        final Future<R> future = Future.future();
+
+        get(domain, uri, port, clazz, 1)
+            .setHandler(ar -> {
+                if (ar.succeeded()) {
+                    future.complete(ar.result());
+                } else {
+                    future.fail(ar.cause());
+                }
+            });
+
         return future;
     }
 
@@ -50,7 +79,7 @@ public class HttpUtils {
 
         client
                 .get(port, domain, uri)
-                .timeout(10 * 1000) // 10 seconds
+                .timeout(GET_TIMEOUT) // 10 seconds
                 .putHeader("content-type", "application/json")
                 .as(BodyCodec.none())
                 .send(ar -> {

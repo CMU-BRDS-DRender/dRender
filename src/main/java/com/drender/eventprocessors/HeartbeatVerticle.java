@@ -33,7 +33,7 @@ public class HeartbeatVerticle extends AbstractVerticle {
                 .handler(message -> {
                     InstanceHeartbeat instanceHeartbeat = Json.decodeValue(message.body().toString(), InstanceHeartbeat.class);
 
-                    httpUtils.get(instanceHeartbeat.getInstance().getIp(), "/nodeStatus", 8080, JobResponse.class)
+                    httpUtils.get(instanceHeartbeat.getInstance().getIp(), "/nodeStatus", 8080, JobResponse.class, 2)
                             .setHandler(ar -> {
                                 if (!ar.succeeded()) {
                                     logger.info("Heartbeat failed for: " + instanceHeartbeat.getInstance());

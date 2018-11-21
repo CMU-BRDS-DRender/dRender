@@ -287,6 +287,7 @@ public class DRenderDriver extends AbstractVerticle {
                         .projectID(project.getID())
                         .source(project.getSource())
                         .action(JobAction.START)
+                        .isActive(true)
                         .messageQ(DRenderDriver.MESSAGE_Q)
                         .build();
 
@@ -488,9 +489,9 @@ public class DRenderDriver extends AbstractVerticle {
         eventBus.send(Channels.JOB_MANAGER, Json.encode(job),
             ar -> {
                 if (ar.succeeded()) {
-                    job.setActive(true);
                     logger.info("Started Job: " + ar.result().body());
                 } else {
+                    job.setActive(false);
                     logger.error("Could not start Job: " + ar.cause());
                 }
             }
@@ -576,6 +577,7 @@ public class DRenderDriver extends AbstractVerticle {
                   .endFrame(frames.get(i)-1)
                   .source(job.getSource())
                   .action(JobAction.START)
+                  .isActive(true)
                   .messageQ(job.getMessageQ())
                   .projectID(job.getProjectID())
                   .outputURI(job.getOutputURI()).build()
@@ -590,6 +592,7 @@ public class DRenderDriver extends AbstractVerticle {
                     .endFrame(endFrame)
                     .source(job.getSource())
                     .action(JobAction.START)
+                    .isActive(true)
                     .messageQ(job.getMessageQ())
                     .projectID(job.getProjectID())
                     .outputURI(job.getOutputURI()).build());

@@ -27,7 +27,7 @@ public class Job {
 
     @Builder
     public Job(DRenderInstance instance, String projectID, S3Source source, int startFrame, int endFrame,
-               JobAction action, S3Source outputURI, MessageQ messageQ) {
+               JobAction action, S3Source outputURI, MessageQ messageQ, boolean isActive) {
         this.ID = UUID.randomUUID().toString();
         this.projectID = projectID;
         this.source = source;
@@ -37,6 +37,7 @@ public class Job {
         this.action = action;
         this.outputURI = outputURI;
         this.messageQ = messageQ;
+        this.isActive = isActive;
         //this.machineName = projectID + "_" + ID + "_" + startFrame + "_" + endFrame;
     }
 }

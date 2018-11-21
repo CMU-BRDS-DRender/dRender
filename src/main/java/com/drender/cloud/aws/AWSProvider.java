@@ -3,7 +3,6 @@ package com.drender.cloud.aws;
 import com.amazonaws.AmazonClientException;
 import com.amazonaws.auth.*;
 import com.drender.cloud.MachineProvider;
-import com.drender.model.cloud.AWSRequestProperty;
 import com.drender.model.instance.DRenderInstance;
 import com.drender.model.instance.VerifyRequest;
 import io.vertx.core.Future;
@@ -12,7 +11,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ExecutionException;
 
-public class AWSProvider implements MachineProvider<AWSRequestProperty>{
+public class AWSProvider implements MachineProvider {
 
     private AWSCredentialsProvider credentialProvider;
     private EC2Provisioner ec2Provisioner;
@@ -40,14 +39,11 @@ public class AWSProvider implements MachineProvider<AWSRequestProperty>{
 
 
     @Override
-    public List<DRenderInstance> startMachines(AWSRequestProperty property, int count) {
-        ec2Provisioner = new EC2Provisioner(property.getRegion(), credentialProvider);
+    public List<DRenderInstance> startMachines(String cloudAMI, int count) {
+        ec2Provisioner = new EC2Provisioner(AWSConfig.getRegion(), credentialProvider);
         try {
             List<DRenderInstance> instances =
-                    ec2Provisioner.spawnInstances(count,
-                            property.getSecurityGroup(),
-                            property.getSshKeyName(),
-                            property.getMachineImageId());
+                    ec2Provisioner.spawnInstances(count, cloudAMI);
             return instances;
         } catch (ExecutionException | InterruptedException e) {
             e.printStackTrace();
@@ -61,14 +57,14 @@ public class AWSProvider implements MachineProvider<AWSRequestProperty>{
     }
 
     @Override
-    public void killMachines(AWSRequestProperty property, List<String> ids) {
-        ec2Provisioner = new EC2Provisioner(property.getRegion(), credentialProvider);
+    public void killMachines(List<String> ids) {
+        ec2Provisioner = new EC2Provisioner(AWSConfig.getRegion(), credentialProvider);
         ec2Provisioner.killInstances(ids);
     }
 
     @Override
-    public Future<Void> restartMachines(AWSRequestProperty property, List<String> ids, VerifyRequest verifyRequest) {
-        ec2Provisioner = new EC2Provisioner(property.getRegion(), credentialProvider);
+    public Future<Void> restartMachines(List<String> ids, VerifyRequest verifyRequest) {
+        ec2Provisioner = new EC2Provisioner(AWSConfig.getRegion(), credentialProvider);
         return ec2Provisioner.restartInstances(ids, verifyRequest);
     }
 

@@ -1,20 +1,15 @@
 package com.drender.cloud.aws;
-import com.amazonaws.AmazonWebServiceRequest;
 import com.amazonaws.auth.AWSCredentialsProvider;
 import com.amazonaws.services.ec2.AmazonEC2;
 import com.amazonaws.services.ec2.AmazonEC2ClientBuilder;
 import com.amazonaws.services.ec2.model.*;
-import com.amazonaws.waiters.Waiter;
-import com.amazonaws.waiters.WaiterHandler;
 import com.amazonaws.waiters.WaiterParameters;
 import com.drender.model.instance.DRenderInstance;
 import com.drender.model.instance.VerifyRequest;
-import com.drender.model.job.JobResponse;
 import com.drender.utils.HttpUtils;
 import io.vertx.core.CompositeFuture;
 import io.vertx.core.Future;
 import io.vertx.core.Vertx;
-import io.vertx.core.json.JsonObject;
 import io.vertx.core.logging.Logger;
 import io.vertx.core.logging.LoggerFactory;
 
@@ -44,17 +39,17 @@ public class EC2Provisioner {
         return ec2Client;
     }
 
-    public List<DRenderInstance> spawnInstances(int count, String securityGroup, String sshKeyName, String imageID) throws ExecutionException, InterruptedException {
+    public List<DRenderInstance> spawnInstances(int count, String imageID) throws ExecutionException, InterruptedException {
 
         RunInstancesRequest runInstancesRequest =
                 new RunInstancesRequest();
 
         runInstancesRequest.withImageId(imageID)
-                .withInstanceType(InstanceType.T2Micro)
+                .withInstanceType(InstanceType.fromValue(AWSConfig.getInstanceType()))
                 .withMinCount(count)
                 .withMaxCount(count)
-                .withKeyName(sshKeyName)
-                .withSecurityGroups(securityGroup)
+                .withKeyName(AWSConfig.getSshKeyName())
+                .withSecurityGroups(AWSConfig.getSecurityGroup())
                 .withIamInstanceProfile(
                         new IamInstanceProfileSpecification().withArn(S3_FULL_ACCESS_ARN)
                 );
@@ -155,8 +150,9 @@ public class EC2Provisioner {
         HttpUtils httpUtils = new HttpUtils(vertx);
 
         Future<Boolean> future = Future.future();
+
+        // Check every 15 seconds
         vertx.setPeriodic(15*1000, id -> {
-            logger.info("Verify restart instance triggered");
             httpUtils.get(ip, verifyRequest.getUri(), verifyRequest.getPort())
                     .setHandler(ar -> {
                         if (ar.succeeded()) {

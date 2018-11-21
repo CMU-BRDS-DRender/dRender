@@ -5,13 +5,11 @@ import com.drender.cloud.aws.AWSProvider;
 import com.drender.cloud.MachineProvider;
 import com.drender.cloud.aws.S3BucketManager;
 import com.drender.model.Channels;
-import com.drender.model.cloud.AWSRequestProperty;
 import com.drender.model.cloud.S3Source;
 import com.drender.model.instance.DRenderInstance;
 import com.drender.model.instance.InstanceResponse;
 import com.drender.model.instance.InstanceRequest;
 import com.drender.model.instance.VerifyRequest;
-import com.drender.model.job.JobResponse;
 import io.vertx.core.*;
 import io.vertx.core.eventbus.EventBus;
 import io.vertx.core.json.Json;
@@ -28,7 +26,7 @@ public class ResourceManager extends AbstractVerticle {
     /*
         Currently setup for AWS
      */
-    private MachineProvider<AWSRequestProperty> machineProvider = new AWSProvider();
+    private MachineProvider machineProvider = new AWSProvider();
     private StorageProvider storageProvider = new S3BucketManager();
 
     private final String SUFFIX = "/";
@@ -132,30 +130,16 @@ public class ResourceManager extends AbstractVerticle {
                 });
     }
 
-    private List<DRenderInstance> getNewInstances(String cloudAMI, int count) {
-        String region = "us-east-1a";
-        String securityGroupName = "HTTP Open";
-        String sshKeyName = "drender";
-        AWSRequestProperty awsRequestProperty = new AWSRequestProperty(sshKeyName, securityGroupName, region, cloudAMI);
-        return machineProvider.startMachines(awsRequestProperty, count);
+    private List<DRenderInstance> getNewInstances(String cloudAMI, int count) {;
+        return machineProvider.startMachines(cloudAMI, count);
     }
 
     private void killInstances(List<String> instanceIds) {
-        String region = "us-east-1a";
-        String securityGroupName = "HTTP Open";
-        String sshKeyName = "drender";
-        AWSRequestProperty awsRequestProperty = new AWSRequestProperty(sshKeyName, securityGroupName, region);
-
-        machineProvider.killMachines(awsRequestProperty, instanceIds);
+        machineProvider.killMachines(instanceIds);
     }
 
     private Future<Void> restartInstances(List<String> instancesIds) {
-        String region = "us-east-1a";
-        String securityGroupName = "HTTP Open";
-        String sshKeyName = "drender";
-        AWSRequestProperty awsRequestProperty = new AWSRequestProperty(sshKeyName, securityGroupName, region);
-
         VerifyRequest verifyRequest = new VerifyRequest("/nodeStatus", 8080);
-        return machineProvider.restartMachines(awsRequestProperty, instancesIds, verifyRequest);
+        return machineProvider.restartMachines(instancesIds, verifyRequest);
     }
 }
